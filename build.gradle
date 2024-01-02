@@ -22,13 +22,14 @@ test {
 // Define the target directory for generated code
 def generatedDir = "${buildDir}/generated/source/java"
 
-task compileCodeGenerator(type: JavaCompile) {
+tasks.register('compileCodeGenerator', JavaCompile) {
     source = files('src/main/java/com/gbujak/kanalarz/codegeneration/KanalarzCodeGenerator.java')
     classpath = sourceSets.main.compileClasspath
     destinationDir = file("${buildDir}/classes/java/main")
 }
 
-task generateCode(dependsOn: compileCodeGenerator) {
+tasks.register('generateCode') {
+    dependsOn compileCodeGenerator
     doLast {
         javaexec {
             main = 'com.gbujak.kanalarz.codegeneration.KanalarzCodeGenerator'
@@ -50,4 +51,8 @@ sourceSets {
 
 clean {
     delete generatedDir
+}
+
+jar {
+    exclude 'com/gbujak/kanalarz/codegeneration'
 }
