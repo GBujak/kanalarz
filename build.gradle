@@ -10,10 +10,44 @@ repositories {
 }
 
 dependencies {
+    implementation 'org.jspecify:jspecify:0.3.0'
     testImplementation platform('org.junit:junit-bom:5.9.1')
     testImplementation 'org.junit.jupiter:junit-jupiter'
 }
 
 test {
     useJUnitPlatform()
+}
+
+// Define the target directory for generated code
+def generatedDir = "${buildDir}/generated/source/java"
+
+task compileCodeGenerator(type: JavaCompile) {
+    source = files('src/main/java/com/gbujak/kanalarz/codegeneration/KanalarzCodeGenerator.java')
+    classpath = sourceSets.main.compileClasspath
+    destinationDir = file("${buildDir}/classes/java/main")
+}
+
+task generateCode(dependsOn: compileCodeGenerator) {
+    doLast {
+        javaexec {
+            main = 'com.gbujak.kanalarz.codegeneration.KanalarzCodeGenerator'
+            classpath = sourceSets.main.runtimeClasspath
+            args = []
+        }
+    }
+}
+
+compileJava.dependsOn generateCode
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java', generatedDir]
+        }
+    }
+}
+
+clean {
+    delete generatedDir
 }
