@@ -1,18 +1,27 @@
 package com.gbujak.kanalarz.teststeps;
 
-import com.gbujak.kanalarz.annotations.Rollback;
-import com.gbujak.kanalarz.annotations.Step;
-import com.gbujak.kanalarz.annotations.StepsComponent;
+import com.gbujak.kanalarz.annotations.*;
+
+import java.util.List;
+import java.util.Map;
 
 @StepsComponent(identifier = "test-steps")
 public class TestSteps {
 
     @Step(identifier = "uppercase-step", fallible = true)
-    public String uppercaseStep(String param) {
-        return param.toUpperCase();
+    public String uppercaseStep(TestUser testUser) {
+        var oldName = testUser.name();
+        testUser.setName(testUser.name().toUpperCase());
+        return oldName;
     }
 
     @Rollback(forStep = "uppercase-step")
-    public void uppercaseRollback() { }
+    public void uppercaseRollback(TestUser testUser, @RollforwardOut String oldName) {
+        testUser.setName(oldName);
+    }
 
+    @Step(identifier = "test-generic")
+    public void testGeneric(@Secret @Arg("testNamesArgName") Map<String, List<String>> names) {
+
+    }
 }

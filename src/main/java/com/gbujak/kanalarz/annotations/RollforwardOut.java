@@ -9,5 +9,5 @@ import java.lang.annotation.*;
 @Inherited
 @Reflective
 @Documented
-public @interface Secret {
+public @interface RollforwardOut {
 }

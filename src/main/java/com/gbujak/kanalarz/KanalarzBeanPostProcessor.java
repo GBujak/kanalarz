@@ -13,10 +13,9 @@ import org.springframework.lang.NonNull;
 import org.springframework.util.ReflectionUtils;
 
 import java.lang.reflect.Method;
-import java.sql.Array;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.lang.reflect.Modifier;
+import java.util.*;
+import java.util.stream.Stream;
 
 public class KanalarzBeanPostProcessor implements BeanPostProcessor {
 
@@ -37,11 +36,19 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
 
         log.info("KANALARZ processing bean [{}] with step identifier [{}]", beanName, stepsComponent.identifier());
 
+        // Should not be necessary, spring will fail on its own on a final class component, just in case
+        if (Modifier.isFinal(target.getClass().getModifiers())) {
+            throw new RuntimeException(
+                "Class [%s] of bean [%s] if Final, can't use it as a steps container!"
+                    .formatted(target.getClass().getName(), beanName)
+            );
+        }
+
         try {
-            validateSteps(target);
+            validateAndRegisterSteps(target, stepsComponent);
         } catch (Exception e) {
             throw new RuntimeException(
-                "Failed to validate step bean [%s] with identifier [%s]"
+                "Failed to validate step in bean [%s] with identifier [%s]"
                     .formatted(beanName, stepsComponent.identifier()),
                 e
             );
@@ -53,8 +60,6 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
         proxyFactory.setInterfaces(target.getClass().getInterfaces());
         proxyFactory.setTarget(target);
         proxyFactory.addAdvice((MethodInterceptor) invocation -> {
-
-            System.out.println("intercepted method call");
             var method = invocation.getMethod();
             Step step = method.getAnnotation(Step.class);
             if (step == null) {
@@ -67,17 +72,15 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
         return proxyFactory.getProxy(getClass().getClassLoader());
     }
 
-    private void validateSteps(Object target) {
-        record MethodAndAnnotations(Method method, Step step) {}
+    private void validateAndRegisterSteps(Object target, StepsComponent stepsComponent) {
+        List<Method> methods = new ArrayList<>();
+        ReflectionUtils.doWithMethods(target.getClass(), methods::add);
 
-        List<MethodAndAnnotations> methods = new ArrayList<>();
-        ReflectionUtils.doWithMethods(target.getClass(), method -> {
-            methods.add(new MethodAndAnnotations(method, method.getAnnotation(Step.class)));
-        });
-
-        for (var methodAndAnnotation : methods) {
-            var method = methodAndAnnotation.method();
-            var step = methodAndAnnotation.step();
+        // sort so rollbacks are at the back so it's easier to register them in the KanalarzContext class
+        methods.sort(Comparator.comparing(it -> it.isAnnotationPresent(Rollback.class)));
+        
+        for (var method : methods) {
+            var step = method.getAnnotation(Step.class);
             var rollback = method.getAnnotation(Rollback.class);
 
             if (step == null && rollback == null) {
@@ -91,21 +94,28 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
                 );
             }
 
+            // Should not be necessary, spring will fail on its own on a final method, just in case
+            if (Modifier.isFinal(method.getModifiers())) {
+                throw new RuntimeException(
+                    "Method [%s] in class [%s] annotated as step of rollback step [%s] is final which is not allowed!"
+                        .formatted(
+                            method.getName(),
+                            target.getClass().getName(),
+                            Stream.concat(
+                                Optional.ofNullable(step).map(Step::identifier).stream(),
+                                Optional.ofNullable(rollback).map(Rollback::forStep).stream()
+                            ).findAny()
+                                .orElse("n/a")
+                        )
+                );
+            }
+
             if (step != null) {
+                kanalarzContext.registerRollforwardStep(target, method, stepsComponent, step);
             }
 
             if (rollback != null) {
-                boolean rollbackTargetExists = methods.stream()
-                    .anyMatch(it ->
-                        it.step() != null && it.step().identifier().equals(rollback.forStep())
-                    );
-
-                if (!rollbackTargetExists) {
-                    throw new RuntimeException(
-                        "Rollback method [%s] is for a non-existing step [%s]"
-                            .formatted(method.getName(), rollback.forStep())
-                    );
-                }
+                kanalarzContext.registerRollbackStep(target, method, stepsComponent, rollback);
             }
         }
     }

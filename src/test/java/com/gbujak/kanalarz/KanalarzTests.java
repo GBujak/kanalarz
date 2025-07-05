@@ -2,6 +2,7 @@ package com.gbujak.kanalarz;
 
 import com.gbujak.kanalarz.teststeps.TestSteps;
 import com.gbujak.kanalarz.teststeps.TestStepsKotlin;
+import com.gbujak.kanalarz.teststeps.TestUser;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,7 +15,7 @@ public class KanalarzTests {
 
     @Test
     void stepsCalled() {
-        testSteps.uppercaseStep("dupa");
+        testSteps.uppercaseStep(new TestUser("dupa"));
     }
 
     @Test

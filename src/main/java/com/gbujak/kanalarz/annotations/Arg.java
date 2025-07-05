@@ -1,6 +1,7 @@
 package com.gbujak.kanalarz.annotations;
 
 import org.springframework.aot.hint.annotation.Reflective;
+import org.springframework.lang.NonNull;
 
 import java.lang.annotation.*;
 
@@ -9,5 +10,8 @@ import java.lang.annotation.*;
 @Inherited
 @Reflective
 @Documented
-public @interface Secret {
+public @interface Arg {
+
+    @NonNull
+    String value();
 }
