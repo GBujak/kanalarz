@@ -2,7 +2,7 @@ package com.gbujak.kanalarz;
 
 import com.gbujak.kanalarz.annotations.Rollback;
 import com.gbujak.kanalarz.annotations.Step;
-import com.gbujak.kanalarz.annotations.StepsComponent;
+import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,7 +29,7 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
 
     @Override
     public Object postProcessAfterInitialization(Object target, @NonNull String beanName) throws BeansException {
-        var stepsComponent = target.getClass().getAnnotation(StepsComponent.class);
+        var stepsComponent = target.getClass().getAnnotation(StepsHolder.class);
         if (stepsComponent == null) {
             return BeanPostProcessor.super.postProcessAfterInitialization(target, beanName);
         }
@@ -72,7 +72,7 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
         return proxyFactory.getProxy(getClass().getClassLoader());
     }
 
-    private void validateAndRegisterSteps(Object target, StepsComponent stepsComponent) {
+    private void validateAndRegisterSteps(Object target, StepsHolder stepsHolder) {
         List<Method> methods = new ArrayList<>();
         ReflectionUtils.doWithMethods(target.getClass(), methods::add);
 
@@ -111,11 +111,11 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
             }
 
             if (step != null) {
-                kanalarzContext.registerRollforwardStep(target, method, stepsComponent, step);
+                kanalarzContext.registerRollforwardStep(target, method, stepsHolder, step);
             }
 
             if (rollback != null) {
-                kanalarzContext.registerRollbackStep(target, method, stepsComponent, rollback);
+                kanalarzContext.registerRollbackStep(target, method, stepsHolder, rollback);
             }
         }
     }

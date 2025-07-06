@@ -7,15 +7,18 @@ import org.aopalliance.intercept.MethodInvocation;
 import java.lang.reflect.*;
 import java.util.*;
 
+import static com.gbujak.kanalarz.NullabilityUtils.isNonNullable;
+import static com.gbujak.kanalarz.NullabilityUtils.isReturnTypeNonNullable;
+
 public class KanalarzContext {
 
     private final Map<String, StepInfo> steps = new HashMap<>();
-    private final Map<String, String> rollbackSteps = new HashMap<>();
+    private final Map<String, String> rollbackStepsForRollforwardSteps = new HashMap<>();
 
     Object handleMethodInvocation(
         Object target,
         MethodInvocation invocation,
-        StepsComponent stepsComponent,
+        StepsHolder stepsHolder,
         Step step
     ) throws InvocationTargetException, IllegalAccessException {
         var method = invocation.getMethod();
@@ -26,10 +29,10 @@ public class KanalarzContext {
     synchronized void registerRollforwardStep(
         Object target,
         Method method,
-        StepsComponent stepsComponent,
+        StepsHolder stepsHolder,
         Step step
     ) {
-        String stepIdentifier = "%s:%s".formatted(stepsComponent.identifier(), step.identifier());
+        String stepIdentifier = "%s:%s".formatted(stepsHolder.identifier(), step.identifier());
         if (this.steps.containsKey(stepIdentifier)) {
             throw new RuntimeException("Duplicated step identifier %s".formatted(stepIdentifier));
         }
@@ -38,6 +41,7 @@ public class KanalarzContext {
         stepInfo.target = target;
         stepInfo.method = method;
         stepInfo.returnType = method.getGenericReturnType();
+        stepInfo.isReturnTypeNonNullable = NullabilityUtils.isReturnTypeNonNullable(method);
         stepInfo.paramsInfo = new ArrayList<>(method.getParameterCount());
 
         for (var param : method.getParameters()) {
@@ -50,10 +54,10 @@ public class KanalarzContext {
     synchronized void registerRollbackStep(
         Object target,
         Method method,
-        StepsComponent stepsComponent,
+        StepsHolder stepsHolder,
         Rollback rollback
     ) {
-        var stepIdentifier = "%s:%s".formatted(stepsComponent.identifier(), rollback.forStep());
+        var stepIdentifier = "%s:%s".formatted(stepsHolder.identifier(), rollback.forStep());
         var rollbackIdentifier = "%s:rollback".formatted(stepIdentifier);
         if (this.steps.containsKey(rollbackIdentifier)) {
             throw new RuntimeException("Duplicated step identifier %s".formatted(stepIdentifier));
@@ -71,6 +75,7 @@ public class KanalarzContext {
         stepInfo.target = target;
         stepInfo.method = method;
         stepInfo.returnType = method.getGenericReturnType();
+        stepInfo.isReturnTypeNonNullable = NullabilityUtils.isReturnTypeNonNullable(method);
         stepInfo.paramsInfo = new ArrayList<>(method.getParameterCount());
 
         for (var param : method.getParameters()) {
@@ -88,6 +93,17 @@ public class KanalarzContext {
                                 paramInfo.paramName,
                                 paramInfo.type.getTypeName(),
                                 rollforwardStep.returnType.getTypeName()
+                            )
+                    );
+                }
+                if (isNonNullable(param) != isReturnTypeNonNullable(rollforwardStep.method)) {
+                    throw new RuntimeException(
+                        ("Rollback step [%s] declares a rollforward step [%s] output parameter [%s] but the return type " +
+                            "of the rollforward step and that parameter have different nullability markings!")
+                            .formatted(
+                                rollbackIdentifier,
+                                stepIdentifier,
+                                paramInfo.paramName
                             )
                     );
                 }
@@ -119,9 +135,11 @@ public class KanalarzContext {
                         )
                 );
             }
+
         }
 
         steps.put(rollbackIdentifier, stepInfo);
+        rollbackStepsForRollforwardSteps.put(stepIdentifier, rollbackIdentifier);
     }
 }
 

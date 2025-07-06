@@ -1,11 +1,12 @@
 package com.gbujak.kanalarz.teststeps
 
-import com.gbujak.kanalarz.NullabilityUtils
 import com.gbujak.kanalarz.annotations.Rollback
 import com.gbujak.kanalarz.annotations.Step
-import com.gbujak.kanalarz.annotations.StepsComponent
+import com.gbujak.kanalarz.annotations.StepsHolder
+import org.springframework.stereotype.Component
 
-@StepsComponent(identifier = "test-steps-kotlin")
+@Component
+@StepsHolder(identifier = "test-steps-kotlin")
 open class TestStepsKotlin {
 
     @Step(identifier = "uppercase-step", fallible = true)

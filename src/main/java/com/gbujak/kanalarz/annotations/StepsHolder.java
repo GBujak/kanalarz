@@ -2,7 +2,6 @@ package com.gbujak.kanalarz.annotations;
 
 import org.springframework.aot.hint.annotation.Reflective;
 import org.springframework.lang.NonNull;
-import org.springframework.stereotype.Component;
 
 import java.lang.annotation.*;
 
@@ -11,8 +10,7 @@ import java.lang.annotation.*;
 @Inherited
 @Documented
 @Reflective
-@Component
-public @interface StepsComponent {
+public @interface StepsHolder {
 
     @NonNull
     String identifier();

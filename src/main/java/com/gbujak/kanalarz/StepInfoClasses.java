@@ -15,6 +15,7 @@ class StepInfoClasses {
         Method method;
         Object target;
         Type returnType;
+        boolean isReturnTypeNonNullable;
         List<ParamInfo> paramsInfo;
     }
 
@@ -22,6 +23,7 @@ class StepInfoClasses {
         String paramName;
         Type type;
         boolean secret;
+        boolean isNonNullable;
         boolean isRollforwardOutput = false;
 
         public static ParamInfo fromParam(Parameter param) {
@@ -32,6 +34,7 @@ class StepInfoClasses {
                     .orElseGet(param::getName);
             paramInfo.secret = param.getAnnotation(Secret.class) != null;
             paramInfo.type = param.getParameterizedType();
+            paramInfo.isNonNullable = NullabilityUtils.isNonNullable(param);
             return paramInfo;
         }
     }

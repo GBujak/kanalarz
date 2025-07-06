@@ -1,12 +1,13 @@
 package com.gbujak.kanalarz.teststeps;
 
 import com.gbujak.kanalarz.annotations.*;
-import org.springframework.lang.NonNull;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
 
-@StepsComponent(identifier = "test-steps")
+@Component
+@StepsHolder(identifier = "test-steps")
 public class TestSteps {
 
     @Step(identifier = "uppercase-step", fallible = true)
@@ -23,12 +24,6 @@ public class TestSteps {
 
     @Step(identifier = "test-generic")
     public void testGeneric(@Secret @Arg("testNamesArgName") Map<String, List<String>> names) {
-
-    }
-
-    @NonNull
-    @Step(identifier = "Non-null void?")
-    public void testNonNull() {
 
     }
 }
