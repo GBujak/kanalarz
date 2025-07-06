@@ -1,6 +1,7 @@
 package com.gbujak.kanalarz.teststeps;
 
 import com.gbujak.kanalarz.annotations.*;
+import org.springframework.lang.NonNull;
 
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,12 @@ public class TestSteps {
 
     @Step(identifier = "test-generic")
     public void testGeneric(@Secret @Arg("testNamesArgName") Map<String, List<String>> names) {
+
+    }
+
+    @NonNull
+    @Step(identifier = "Non-null void?")
+    public void testNonNull() {
 
     }
 }

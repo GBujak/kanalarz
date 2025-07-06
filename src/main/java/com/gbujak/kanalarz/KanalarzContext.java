@@ -1,38 +1,13 @@
 package com.gbujak.kanalarz;
 
 import com.gbujak.kanalarz.annotations.*;
+import com.gbujak.kanalarz.StepInfoClasses.*;
 import org.aopalliance.intercept.MethodInvocation;
 
 import java.lang.reflect.*;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 public class KanalarzContext {
-
-    private static class StepInfo {
-        Method method;
-        Object target;
-        Type returnType;
-        List<ParamInfo> paramsInfo;
-    }
-
-    private static class ParamInfo {
-        String paramName;
-        Type type;
-        boolean secret;
-        boolean isRollforwardOutput = false;
-
-        public static ParamInfo fromParam(Parameter param) {
-            var paramInfo = new ParamInfo();
-            paramInfo.paramName =
-                Optional.ofNullable(param.getAnnotation(Arg.class))
-                    .map(Arg::value)
-                    .orElseGet(param::getName);
-            paramInfo.secret = param.getAnnotation(Secret.class) != null;
-            paramInfo.type = param.getParameterizedType();
-            return paramInfo;
-        }
-    }
 
     private final Map<String, StepInfo> steps = new HashMap<>();
     private final Map<String, String> rollbackSteps = new HashMap<>();
@@ -101,7 +76,6 @@ public class KanalarzContext {
         for (var param : method.getParameters()) {
             var paramInfo = ParamInfo.fromParam(param);
             stepInfo.paramsInfo.add(paramInfo);
-
             if (param.getAnnotation(RollforwardOut.class) != null) {
                 paramInfo.isRollforwardOutput = true;
                 if (!param.getParameterizedType().equals(rollforwardStep.returnType)) {
