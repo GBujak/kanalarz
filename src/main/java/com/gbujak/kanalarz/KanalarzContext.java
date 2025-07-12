@@ -7,9 +7,6 @@ import org.aopalliance.intercept.MethodInvocation;
 import java.lang.reflect.*;
 import java.util.*;
 
-import static com.gbujak.kanalarz.NullabilityUtils.isNonNullable;
-import static com.gbujak.kanalarz.NullabilityUtils.isReturnTypeNonNullable;
-
 public class KanalarzContext {
 
     private final Map<String, StepInfo> steps = new HashMap<>();
@@ -36,18 +33,7 @@ public class KanalarzContext {
         if (this.steps.containsKey(stepIdentifier)) {
             throw new RuntimeException("Duplicated step identifier %s".formatted(stepIdentifier));
         }
-
-        var stepInfo = new StepInfo();
-        stepInfo.target = target;
-        stepInfo.method = method;
-        stepInfo.returnType = method.getGenericReturnType();
-        stepInfo.isReturnTypeNonNullable = NullabilityUtils.isReturnTypeNonNullable(method);
-        stepInfo.paramsInfo = new ArrayList<>(method.getParameterCount());
-
-        for (var param : method.getParameters()) {
-            stepInfo.paramsInfo.add(ParamInfo.fromParam(param));
-        }
-
+        var stepInfo = StepInfo.createNew(target, method, step);
         steps.put(stepIdentifier, stepInfo);
     }
 
@@ -71,39 +57,31 @@ public class KanalarzContext {
             );
         }
 
-        var stepInfo = new StepInfo();
-        stepInfo.target = target;
-        stepInfo.method = method;
-        stepInfo.returnType = method.getGenericReturnType();
-        stepInfo.isReturnTypeNonNullable = NullabilityUtils.isReturnTypeNonNullable(method);
-        stepInfo.paramsInfo = new ArrayList<>(method.getParameterCount());
+        var stepInfo = StepInfo.createNew(target, method, rollback);
 
-        for (var param : method.getParameters()) {
-            var paramInfo = ParamInfo.fromParam(param);
-            stepInfo.paramsInfo.add(paramInfo);
-            if (param.getAnnotation(RollforwardOut.class) != null) {
-                paramInfo.isRollforwardOutput = true;
-                if (!param.getParameterizedType().equals(rollforwardStep.returnType)) {
+        for (var param : stepInfo.paramsInfo) {
+            if (param.isRollforwardOutput) {
+                if (!param.type.equals(rollforwardStep.returnType)) {
                     throw new RuntimeException(
                         ("Rollback step [%s] declares a rollforward step [%s] output parameter [%s] but the return type " +
                             "of the rollforward step and that parameter are different! ([%s] and [%s])")
                             .formatted(
                                 rollbackIdentifier,
                                 stepIdentifier,
-                                paramInfo.paramName,
-                                paramInfo.type.getTypeName(),
+                                param.paramName,
+                                param.type.getTypeName(),
                                 rollforwardStep.returnType.getTypeName()
                             )
                     );
                 }
-                if (isNonNullable(param) != isReturnTypeNonNullable(rollforwardStep.method)) {
+                if (param.isNonNullable != rollforwardStep.isReturnTypeNonNullable) {
                     throw new RuntimeException(
                         ("Rollback step [%s] declares a rollforward step [%s] output parameter [%s] but the return type " +
                             "of the rollforward step and that parameter have different nullability markings!")
                             .formatted(
                                 rollbackIdentifier,
                                 stepIdentifier,
-                                paramInfo.paramName
+                                param.paramName
                             )
                     );
                 }
@@ -112,25 +90,25 @@ public class KanalarzContext {
 
             Optional<ParamInfo> correspondingParam =
                 rollforwardStep.paramsInfo.stream()
-                    .filter(it -> it.paramName.equals(paramInfo.paramName))
+                    .filter(it -> it.paramName.equals(param.paramName))
                     .findAny();
 
             if (correspondingParam.isEmpty()) {
                 throw new RuntimeException(
                     "Could not find corresponding param for param [%s] in step [%s] when processing rollback step [%s]"
-                        .formatted(paramInfo.paramName, stepIdentifier, rollbackIdentifier)
+                        .formatted(param.paramName, stepIdentifier, rollbackIdentifier)
                 );
             }
 
-            if (!correspondingParam.get().type.equals(paramInfo.type)) {
+            if (!correspondingParam.get().type.equals(param.type)) {
                 throw new RuntimeException(
                     ("Rollback step [%s] declares a parameter [%s] from the rollforward step [%s] " +
                         "but the types are different! ([%s] and [%s])")
                         .formatted(
                             rollbackIdentifier,
-                            paramInfo.paramName,
+                            param.paramName,
                             stepIdentifier,
-                            paramInfo.type.getTypeName(),
+                            param.type.getTypeName(),
                             correspondingParam.get().type.getTypeName()
                         )
                 );
