@@ -11,15 +11,14 @@ import org.springframework.lang.Nullable;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Function;
 
 public class Kanalarz {
 
     private final Map<String, StepInfo> steps = new HashMap<>();
     private final Map<String, String> rollbackStepsForRollforwardSteps = new HashMap<>();
+    private final Set<UUID> cancellableContexts = Collections.synchronizedSet(new HashSet<>());
 
     private static final ThreadLocal<KanalarzContext> kanalarzContextThreadLocal = new ThreadLocal<>();
 
@@ -151,19 +150,26 @@ public class Kanalarz {
     }
 
     public <T> T inContext(Map<String, String> metadata, Function<KanalarzContext, T> body) {
-        var previous = kanalarzContextThreadLocal.get();
+        KanalarzContext previous = kanalarzContextThreadLocal.get();
         if (previous != null) {
             throw new IllegalStateException(
-                "Nested kanalarz context [" + previous.getJobId() + "] with metadata " + previous.fullMetadata()
+                "Nested kanalarz context [" + previous.getId() + "] with metadata " + previous.fullMetadata()
             );
         }
+
+        UUID newContextId = null;
         try {
             var context = new KanalarzContext(this);
+            newContextId = context.getId();
+            cancellableContexts.add(newContextId);
             context.putAllMetadata(metadata);
             kanalarzContextThreadLocal.set(context);
             return body.apply(context);
         } finally {
             kanalarzContextThreadLocal.remove();
+            if (newContextId != null) {
+                cancellableContexts.remove(newContextId);
+            }
         }
     }
 }

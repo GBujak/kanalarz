@@ -1,5 +1,6 @@
 package com.gbujak.kanalarz;
 
+import jakarta.annotation.Nonnull;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
@@ -8,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class KanalarzContext {
 
-    private final UUID jobId = UUID.randomUUID();
+    private final UUID id = UUID.randomUUID();
     private final Kanalarz kanalarz;
     private final Map<String, String> metadata = new ConcurrentHashMap<>();
 
@@ -16,8 +17,9 @@ public class KanalarzContext {
         this.kanalarz = kanalarz;
     }
 
-    public UUID getJobId() {
-        return jobId;
+    @NonNull
+    public UUID getId() {
+        return id;
     }
 
     @NonNull
@@ -31,16 +33,22 @@ public class KanalarzContext {
     }
 
     @Nullable
-    public String getMetadata(String key) {
+    public String getMetadata(@NonNull String key) {
         return this.metadata.get(key);
     }
 
     @NonNull
-    public Optional<String> getMetadataOpt(String key) {
+    public Optional<String> getMetadataOpt(@Nonnull String key) {
         return Optional.ofNullable(this.getMetadata(key));
     }
 
-    public String putMetadata(String key, String value) {
+    @Nullable
+    public String putMetadata(@NonNull String key, @Nonnull String value) {
         return this.metadata.put(key, value);
+    }
+
+    @Nullable
+    public String removeMetadata(@NonNull String key) {
+        return this.metadata.remove(key);
     }
 }

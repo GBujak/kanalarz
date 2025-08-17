@@ -16,11 +16,13 @@ public class StepOut<T> {
         this.error = error;
     }
 
-    static <T> StepOut<T> newOk(@NonNull T value) {
+    @NonNull
+    public static <T> StepOut<T> newOk(@NonNull T value) {
         return new StepOut<>(value, null);
     }
 
-    static <T> StepOut<T> newErr(@NonNull Throwable error) {
+    @NonNull
+    public static <T> StepOut<T> newErr(@NonNull Throwable error) {
         return new StepOut<>(null, error);
     }
 
