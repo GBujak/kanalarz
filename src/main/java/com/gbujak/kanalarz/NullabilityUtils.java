@@ -1,17 +1,16 @@
 package com.gbujak.kanalarz;
 
-import java.lang.annotation.Annotation;
-import java.lang.reflect.Method;
-import java.lang.reflect.Parameter;
-import java.util.Optional;
-
+import kotlin.Metadata;
 import kotlin.jvm.internal.Reflection;
 import kotlin.reflect.KClass;
 import kotlin.reflect.KFunction;
 import kotlin.reflect.KParameter;
-import kotlin.Metadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 
 public class NullabilityUtils {
 

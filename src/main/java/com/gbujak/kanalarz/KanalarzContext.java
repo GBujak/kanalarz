@@ -1,11 +1,17 @@
 package com.gbujak.kanalarz;
 
-import com.gbujak.kanalarz.annotations.*;
-import com.gbujak.kanalarz.StepInfoClasses.*;
+import com.gbujak.kanalarz.StepInfoClasses.ParamInfo;
+import com.gbujak.kanalarz.StepInfoClasses.StepInfo;
+import com.gbujak.kanalarz.annotations.Rollback;
+import com.gbujak.kanalarz.annotations.Step;
+import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.aopalliance.intercept.MethodInvocation;
 
-import java.lang.reflect.*;
-import java.util.*;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 
 public class KanalarzContext {
 
@@ -63,8 +69,8 @@ public class KanalarzContext {
             if (param.isRollforwardOutput) {
                 if (!param.type.equals(rollforwardStep.returnType)) {
                     throw new RuntimeException(
-                        ("Rollback step [%s] declares a rollforward step [%s] output parameter [%s] but the return type " +
-                            "of the rollforward step and that parameter are different! ([%s] and [%s])")
+                        ("Rollback step [%s] declares a rollforward step [%s] output parameter [%s] but the return " +
+                            "type of the rollforward step and that parameter are different! ([%s] and [%s])")
                             .formatted(
                                 rollbackIdentifier,
                                 stepIdentifier,
@@ -76,8 +82,8 @@ public class KanalarzContext {
                 }
                 if (param.isNonNullable != rollforwardStep.isReturnTypeNonNullable) {
                     throw new RuntimeException(
-                        ("Rollback step [%s] declares a rollforward step [%s] output parameter [%s] but the return type " +
-                            "of the rollforward step and that parameter have different nullability markings!")
+                        ("Rollback step [%s] declares a rollforward step [%s] output parameter [%s] but the return " +
+                            "type of the rollforward step and that parameter have different nullability markings!")
                             .formatted(
                                 rollbackIdentifier,
                                 stepIdentifier,

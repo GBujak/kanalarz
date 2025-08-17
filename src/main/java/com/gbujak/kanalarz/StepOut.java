@@ -1,6 +1,5 @@
 package com.gbujak.kanalarz;
 
-import com.gbujak.kanalarz.annotations.Secret;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 

@@ -3,7 +3,6 @@ package com.gbujak.kanalarz;
 import com.gbujak.kanalarz.annotations.*;
 import org.springframework.lang.Nullable;
 
-import java.lang.annotation.Target;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
