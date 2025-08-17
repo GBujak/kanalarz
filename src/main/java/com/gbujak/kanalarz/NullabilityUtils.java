@@ -12,7 +12,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
-public class NullabilityUtils {
+class NullabilityUtils {
 
     private static final Logger log = LoggerFactory.getLogger(NullabilityUtils.class);
 
