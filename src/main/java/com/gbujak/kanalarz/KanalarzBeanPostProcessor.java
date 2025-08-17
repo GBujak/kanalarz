@@ -24,10 +24,10 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(KanalarzBeanPostProcessor.class);
 
-    private final KanalarzContext kanalarzContext;
+    private final Kanalarz kanalarz;
 
-    public KanalarzBeanPostProcessor(KanalarzContext kanalarzContext) {
-        this.kanalarzContext = kanalarzContext;
+    public KanalarzBeanPostProcessor(Kanalarz kanalarz) {
+        this.kanalarz = kanalarz;
     }
 
     @Override
@@ -68,7 +68,7 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
             if (step == null) {
                 return method.invoke(target, invocation.getArguments());
             } else {
-                return kanalarzContext.handleMethodInvocation(target, invocation, stepsComponent, step);
+                return kanalarz.handleMethodInvocation(target, invocation, stepsComponent, step);
             }
         });
 
@@ -114,11 +114,11 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
             }
 
             if (step != null) {
-                kanalarzContext.registerRollforwardStep(target, method, stepsHolder, step);
+                kanalarz.registerRollforwardStep(target, method, stepsHolder, step);
             }
 
             if (rollback != null) {
-                kanalarzContext.registerRollbackStep(target, method, stepsHolder, rollback);
+                kanalarz.registerRollbackStep(target, method, stepsHolder, rollback);
             }
         }
     }

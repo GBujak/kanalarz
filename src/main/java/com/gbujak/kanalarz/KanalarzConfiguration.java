@@ -11,12 +11,12 @@ public class KanalarzConfiguration {
 
     @Bean
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
-    KanalarzContext kanalarzContext() {
-        return new KanalarzContext();
+    Kanalarz kanalarz() {
+        return new Kanalarz();
     }
 
     @Bean
-    KanalarzBeanPostProcessor kanalarzBeanPostProcessor(KanalarzContext context) {
-        return new KanalarzBeanPostProcessor(context);
+    KanalarzBeanPostProcessor kanalarzBeanPostProcessor(Kanalarz kanalarz) {
+        return new KanalarzBeanPostProcessor(kanalarz);
     }
 }
