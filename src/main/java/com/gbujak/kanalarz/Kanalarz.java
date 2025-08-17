@@ -35,7 +35,7 @@ public class Kanalarz {
     @NonNull
     public static KanalarzContext contextOrThrow() {
         return contextOpt()
-            .orElseThrow(() -> new RuntimeException("Not within a context"));
+            .orElseThrow(() -> new IllegalStateException("Not within a context"));
     }
 
     Object handleMethodInvocation(
