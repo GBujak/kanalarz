@@ -11,10 +11,12 @@ import org.slf4j.LoggerFactory;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 
-class NullabilityUtils {
+class Utils {
 
-    private static final Logger log = LoggerFactory.getLogger(NullabilityUtils.class);
+    private static final Logger log = LoggerFactory.getLogger(Utils.class);
 
     public static boolean isNonNullable(Parameter parameter) {
         if (isAnnotatedWithNullable(parameter.getAnnotations())) {
@@ -182,6 +184,15 @@ class NullabilityUtils {
             }
         } catch (Exception e) {
             log.warn("Error trying to determine if a kotlin return type is nullable", e);
+        }
+        return false;
+    }
+
+    static boolean isStepOut(Type type) {
+        if (type instanceof ParameterizedType pt) {
+            return pt.getRawType().equals(StepOut.class);
+        } else if (type instanceof Class<?> clazz) {
+            return clazz.equals(StepOut.class);
         }
         return false;
     }

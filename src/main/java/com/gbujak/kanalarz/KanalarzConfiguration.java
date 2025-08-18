@@ -16,8 +16,12 @@ public class KanalarzConfiguration {
     }
 
     @Bean
-    Kanalarz kanalarz(KanalarzStepsRegistry stepsRegistry) {
-        return new Kanalarz(stepsRegistry);
+    Kanalarz kanalarz(
+        KanalarzStepsRegistry stepsRegistry,
+        @Lazy KanalarzSerialization serialization,
+        @Lazy KanalarzPersistance persistance
+    ) {
+        return new Kanalarz(stepsRegistry, serialization, persistance);
     }
 
     @Bean

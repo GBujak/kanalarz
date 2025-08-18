@@ -4,6 +4,7 @@ import com.gbujak.kanalarz.annotations.Rollback;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.lang.NonNull;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
@@ -12,7 +13,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-public class KanalarzStepsRegistry {
+import static com.gbujak.kanalarz.Utils.isStepOut;
+
+class KanalarzStepsRegistry {
 
     private final Map<String, StepInfoClasses.StepInfo> steps = new HashMap<>();
     private final Map<String, String> rollbackStepsForRollforwardSteps = new HashMap<>();
@@ -122,6 +125,26 @@ public class KanalarzStepsRegistry {
         rollbackStepsForRollforwardSteps.put(stepIdentifier, rollbackIdentifier);
     }
 
+    @NonNull
+    StepInfoClasses.StepInfo getStepInfo(StepsHolder stepsHolder, Step step) {
+        var identifier = stepIdentifier(stepsHolder, step);
+        return getStepInfoOrThrow(identifier);
+    }
+
+    @NonNull
+    Optional<StepInfoClasses.StepInfo> getStepRollbackInfo(StepsHolder stepsHolder, Step step) {
+        return Optional.of(stepIdentifier(stepsHolder, step))
+            .map(this.rollbackStepsForRollforwardSteps::get)
+            .map(this::getStepInfoOrThrow);
+    }
+
+    private StepInfoClasses.StepInfo getStepInfoOrThrow(String identifier) {
+        return Optional.ofNullable(this.steps.get(identifier))
+            .orElseThrow(() -> new RuntimeException(
+                "Could not find step for identifier [%s]".formatted(identifier))
+            );
+    }
+
     @NotNull
     private static String stepIdentifier(StepsHolder stepsHolder, Step step) {
         return "%s:%s".formatted(stepsHolder.identifier(), step.identifier());
@@ -135,14 +158,5 @@ public class KanalarzStepsRegistry {
     @NotNull
     private static String rollbackIdentifier(StepsHolder stepsHolder, Rollback rollback) {
         return "%s:rollback".formatted(stepIdentifier(stepsHolder, rollback));
-    }
-
-    private static boolean isStepOut(Type type) {
-        if (type instanceof ParameterizedType pt) {
-            return pt.getRawType().equals(StepOut.class);
-        } else if (type instanceof Class<?> clazz) {
-            return clazz.equals(StepOut.class);
-        }
-        return false;
     }
 }

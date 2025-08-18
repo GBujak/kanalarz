@@ -16,7 +16,6 @@ public interface KanalarzSerialization {
         boolean secret
     ) {}
     record SerializeReturnInfo(
-        @NonNull String name,
         @NonNull Type type,
         @Nullable StepOut<?> value,
         boolean secret

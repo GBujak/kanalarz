@@ -61,7 +61,7 @@ class StepInfoClasses {
                     .map(StepDescription::value)
                     .orElse(null);
             stepInfo.returnType = method.getGenericReturnType();
-            stepInfo.isReturnTypeNonNullable = NullabilityUtils.isReturnTypeNonNullable(method);
+            stepInfo.isReturnTypeNonNullable = Utils.isReturnTypeNonNullable(method);
             stepInfo.paramsInfo = new ArrayList<>(method.getParameterCount());
             for (var param : method.getParameters()) {
                 stepInfo.paramsInfo.add(ParamInfo.createNew(param));
@@ -87,7 +87,7 @@ class StepInfoClasses {
                     .orElseGet(param::getName);
             paramInfo.secret = param.getAnnotation(Secret.class) != null;
             paramInfo.type = param.getParameterizedType();
-            paramInfo.isNonNullable = NullabilityUtils.isNonNullable(param);
+            paramInfo.isNonNullable = Utils.isNonNullable(param);
             if (param.getAnnotation(RollforwardOut.class) != null) {
                 paramInfo.isRollforwardOutput = true;
             }
