@@ -14,4 +14,7 @@ public @interface Rollback {
 
     @NonNull
     String forStep();
+
+    @NonNull
+    boolean fallible() default false;
 }

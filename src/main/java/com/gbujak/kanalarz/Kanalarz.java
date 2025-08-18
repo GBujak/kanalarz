@@ -6,6 +6,7 @@ import com.gbujak.kanalarz.annotations.Rollback;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.aopalliance.intercept.MethodInvocation;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
@@ -53,13 +54,14 @@ public class Kanalarz {
         Object target,
         Method method,
         StepsHolder stepsHolder,
-        Step step
+        Step step,
+        boolean returnIsSecret
     ) {
-        String stepIdentifier = "%s:%s".formatted(stepsHolder.identifier(), step.identifier());
+        String stepIdentifier = stepIdentifier(stepsHolder, step);
         if (this.steps.containsKey(stepIdentifier)) {
             throw new RuntimeException("Duplicated step identifier %s".formatted(stepIdentifier));
         }
-        var stepInfo = StepInfo.createNew(target, method, step);
+        var stepInfo = StepInfo.createNew(target, method, step, returnIsSecret);
         steps.put(stepIdentifier, stepInfo);
     }
 
@@ -67,10 +69,11 @@ public class Kanalarz {
         Object target,
         Method method,
         StepsHolder stepsHolder,
-        Rollback rollback
+        Rollback rollback,
+        boolean returnIsSecret
     ) {
-        var stepIdentifier = "%s:%s".formatted(stepsHolder.identifier(), rollback.forStep());
-        var rollbackIdentifier = "%s:rollback".formatted(stepIdentifier);
+        var stepIdentifier = stepIdentifier(stepsHolder, rollback);
+        var rollbackIdentifier = rollbackIdentifier(stepsHolder, rollback);
         if (this.steps.containsKey(rollbackIdentifier)) {
             throw new RuntimeException("Duplicated step identifier %s".formatted(stepIdentifier));
         }
@@ -83,7 +86,7 @@ public class Kanalarz {
             );
         }
 
-        var stepInfo = StepInfo.createNew(target, method, rollback);
+        var stepInfo = StepInfo.createNew(target, method, rollback, returnIsSecret);
 
         for (var param : stepInfo.paramsInfo) {
             if (param.isRollforwardOutput) {
@@ -143,6 +146,21 @@ public class Kanalarz {
 
         steps.put(rollbackIdentifier, stepInfo);
         rollbackStepsForRollforwardSteps.put(stepIdentifier, rollbackIdentifier);
+    }
+
+    @NotNull
+    private static String stepIdentifier(StepsHolder stepsHolder, Step step) {
+        return "%s:%s".formatted(stepsHolder.identifier(), step.identifier());
+    }
+
+    @NotNull
+    private static String stepIdentifier(StepsHolder stepsHolder, Rollback rollback) {
+        return "%s:%s".formatted(stepsHolder.identifier(), rollback.forStep());
+    }
+
+    @NotNull
+    private static String rollbackIdentifier(StepsHolder stepsHolder, Rollback rollback) {
+        return "%s:rollback".formatted(stepIdentifier(stepsHolder, rollback));
     }
 
     public <T> T inContext(Function<KanalarzContext, T> body) {

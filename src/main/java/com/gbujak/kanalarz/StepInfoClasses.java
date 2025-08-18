@@ -21,28 +21,41 @@ class StepInfoClasses {
         Type returnType;
         boolean isReturnTypeNonNullable;
         List<ParamInfo> paramsInfo;
+        boolean returnIsSecret;
 
         private StepInfo() {}
 
-        public static StepInfo createNew(Object target, Method method, Step step) {
-            return doCreateNew(target, method, step, null);
+        public static StepInfo createNew(
+            Object target,
+            Method method,
+            Step step,
+            boolean returnIsSecret
+        ) {
+            return doCreateNew(target, method, step, null, returnIsSecret);
         }
 
-        public static StepInfo createNew(Object target, Method method, Rollback rollback) {
-            return doCreateNew(target, method, null, rollback);
+        public static StepInfo createNew(
+            Object target,
+            Method method,
+            Rollback rollback,
+            boolean returnIsSecret
+        ) {
+            return doCreateNew(target, method, null, rollback, returnIsSecret);
         }
 
         private static StepInfo doCreateNew(
             Object target,
             Method method,
             @Nullable Step step,
-            @Nullable Rollback rollback
+            @Nullable Rollback rollback,
+            boolean returnIsSecret
         ) {
             var stepInfo = new StepInfo();
             stepInfo.target = target;
             stepInfo.method = method;
             stepInfo.step = step;
             stepInfo.rollback = rollback;
+            stepInfo.returnIsSecret = returnIsSecret;
             stepInfo.description =
                 Optional.ofNullable(method.getAnnotation(StepDescription.class))
                     .map(StepDescription::value)

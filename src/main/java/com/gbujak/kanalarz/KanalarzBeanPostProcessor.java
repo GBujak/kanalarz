@@ -1,6 +1,7 @@
 package com.gbujak.kanalarz;
 
 import com.gbujak.kanalarz.annotations.Rollback;
+import com.gbujak.kanalarz.annotations.Secret;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.aopalliance.intercept.MethodInterceptor;
@@ -85,6 +86,7 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
         for (var method : methods) {
             var step = method.getAnnotation(Step.class);
             var rollback = method.getAnnotation(Rollback.class);
+            var returnIsSecret = method.getAnnotation(Secret.class) != null;
 
             if (step == null && rollback == null) {
                 continue;
@@ -114,11 +116,11 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
             }
 
             if (step != null) {
-                kanalarz.registerRollforwardStep(target, method, stepsHolder, step);
+                kanalarz.registerRollforwardStep(target, method, stepsHolder, step, returnIsSecret);
             }
 
             if (rollback != null) {
-                kanalarz.registerRollbackStep(target, method, stepsHolder, rollback);
+                kanalarz.registerRollbackStep(target, method, stepsHolder, rollback, returnIsSecret);
             }
         }
     }
