@@ -3,6 +3,7 @@ package com.gbujak.kanalarz;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Role;
 
 @Configuration
@@ -10,13 +11,12 @@ import org.springframework.context.annotation.Role;
 public class KanalarzConfiguration {
 
     @Bean
-    @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
     Kanalarz kanalarz() {
         return new Kanalarz();
     }
 
     @Bean
-    KanalarzBeanPostProcessor kanalarzBeanPostProcessor(Kanalarz kanalarz) {
+    KanalarzBeanPostProcessor kanalarzBeanPostProcessor(@Lazy Kanalarz kanalarz) {
         return new KanalarzBeanPostProcessor(kanalarz);
     }
 }

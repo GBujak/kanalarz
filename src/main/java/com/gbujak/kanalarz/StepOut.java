@@ -17,12 +17,12 @@ public class StepOut<T> {
     }
 
     @NonNull
-    public static <T> StepOut<T> newOk(@NonNull T value) {
+    public static <T> StepOut<T> ok(@NonNull T value) {
         return new StepOut<>(value, null);
     }
 
     @NonNull
-    public static <T> StepOut<T> newErr(@NonNull Throwable error) {
+    public static <T> StepOut<T> err(@NonNull Throwable error) {
         return new StepOut<>(null, error);
     }
 

@@ -1,5 +1,6 @@
 package com.gbujak.kanalarz.teststeps;
 
+import com.gbujak.kanalarz.StepOut;
 import com.gbujak.kanalarz.annotations.*;
 import org.springframework.stereotype.Component;
 
@@ -11,15 +12,15 @@ import java.util.Map;
 public class TestSteps {
 
     @Step(identifier = "uppercase-step", fallible = true)
-    public String uppercaseStep(TestUser testUser) {
+    public StepOut<String> uppercaseStep(TestUser testUser) {
         var oldName = testUser.name();
         testUser.setName(testUser.name().toUpperCase());
-        return oldName;
+        return StepOut.ok(oldName);
     }
 
     @Rollback(forStep = "uppercase-step")
-    public void uppercaseRollback(TestUser testUser, @RollforwardOut String oldName) {
-        testUser.setName(oldName);
+    public void uppercaseRollback(TestUser testUser, @RollforwardOut StepOut<String> oldName) {
+        testUser.setName(oldName.getOrThrow());
     }
 
     @Step(identifier = "test-generic")

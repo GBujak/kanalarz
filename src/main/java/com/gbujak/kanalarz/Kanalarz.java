@@ -12,6 +12,8 @@ import org.springframework.lang.Nullable;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.*;
 import java.util.function.Function;
 
@@ -62,6 +64,12 @@ public class Kanalarz {
             throw new RuntimeException("Duplicated step identifier %s".formatted(stepIdentifier));
         }
         var stepInfo = StepInfo.createNew(target, method, step, returnIsSecret);
+        if (step.fallible() && !isStepOut(stepInfo.returnType)) {
+            throw new RuntimeException(
+                "Fallible steps must return a [%s] instance so the error can be wrapped and returned."
+                    .formatted(StepOut.class.getCanonicalName())
+            );
+        }
         steps.put(stepIdentifier, stepInfo);
     }
 
@@ -148,21 +156,6 @@ public class Kanalarz {
         rollbackStepsForRollforwardSteps.put(stepIdentifier, rollbackIdentifier);
     }
 
-    @NotNull
-    private static String stepIdentifier(StepsHolder stepsHolder, Step step) {
-        return "%s:%s".formatted(stepsHolder.identifier(), step.identifier());
-    }
-
-    @NotNull
-    private static String stepIdentifier(StepsHolder stepsHolder, Rollback rollback) {
-        return "%s:%s".formatted(stepsHolder.identifier(), rollback.forStep());
-    }
-
-    @NotNull
-    private static String rollbackIdentifier(StepsHolder stepsHolder, Rollback rollback) {
-        return "%s:rollback".formatted(stepIdentifier(stepsHolder, rollback));
-    }
-
     public <T> T inContext(Function<KanalarzContext, T> body) {
         return inContext(Map.of(), body);
     }
@@ -189,6 +182,30 @@ public class Kanalarz {
                 cancellableContexts.remove(newContextId);
             }
         }
+    }
+
+    @NotNull
+    private static String stepIdentifier(StepsHolder stepsHolder, Step step) {
+        return "%s:%s".formatted(stepsHolder.identifier(), step.identifier());
+    }
+
+    @NotNull
+    private static String stepIdentifier(StepsHolder stepsHolder, Rollback rollback) {
+        return "%s:%s".formatted(stepsHolder.identifier(), rollback.forStep());
+    }
+
+    @NotNull
+    private static String rollbackIdentifier(StepsHolder stepsHolder, Rollback rollback) {
+        return "%s:rollback".formatted(stepIdentifier(stepsHolder, rollback));
+    }
+
+    private static boolean isStepOut(Type type) {
+        if (type instanceof ParameterizedType pt) {
+            return pt.getRawType().equals(StepOut.class);
+        } else if (type instanceof Class<?> clazz) {
+            return clazz.equals(StepOut.class);
+        }
+        return false;
     }
 }
 

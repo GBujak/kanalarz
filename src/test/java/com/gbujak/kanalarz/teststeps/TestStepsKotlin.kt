@@ -9,11 +9,11 @@ import org.springframework.stereotype.Component
 @StepsHolder(identifier = "test-steps-kotlin")
 open class TestStepsKotlin {
 
-    @Step(identifier = "uppercase-step", fallible = true)
+    @Step(identifier = "uppercase-step")
     open fun uppercaseStep(param: String): String =
         param.uppercase()
 
-    @Step(identifier = "nullable-uppercase-step", fallible = true)
+    @Step(identifier = "nullable-uppercase-step")
     open fun uppercaseStepNullable(paramNullable: String?): String? =
         paramNullable?.uppercase()
 
