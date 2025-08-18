@@ -26,9 +26,11 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
     private static final Logger log = LoggerFactory.getLogger(KanalarzBeanPostProcessor.class);
 
     private final Kanalarz kanalarz;
+    private final KanalarzStepsRegistry stepsRegistry;
 
-    public KanalarzBeanPostProcessor(Kanalarz kanalarz) {
+    public KanalarzBeanPostProcessor(Kanalarz kanalarz, KanalarzStepsRegistry stepsRegistry) {
         this.kanalarz = kanalarz;
+        this.stepsRegistry = stepsRegistry;
     }
 
     @Override
@@ -116,11 +118,11 @@ public class KanalarzBeanPostProcessor implements BeanPostProcessor {
             }
 
             if (step != null) {
-                kanalarz.registerRollforwardStep(target, method, stepsHolder, step, returnIsSecret);
+                stepsRegistry.registerRollforwardStep(target, method, stepsHolder, step, returnIsSecret);
             }
 
             if (rollback != null) {
-                kanalarz.registerRollbackStep(target, method, stepsHolder, rollback, returnIsSecret);
+                stepsRegistry.registerRollbackStep(target, method, stepsHolder, rollback, returnIsSecret);
             }
         }
     }

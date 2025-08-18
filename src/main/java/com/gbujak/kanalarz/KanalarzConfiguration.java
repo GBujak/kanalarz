@@ -11,12 +11,20 @@ import org.springframework.context.annotation.Role;
 public class KanalarzConfiguration {
 
     @Bean
-    Kanalarz kanalarz() {
-        return new Kanalarz();
+    KanalarzStepsRegistry kanalarzStepsRegistry() {
+        return new KanalarzStepsRegistry();
     }
 
     @Bean
-    KanalarzBeanPostProcessor kanalarzBeanPostProcessor(@Lazy Kanalarz kanalarz) {
-        return new KanalarzBeanPostProcessor(kanalarz);
+    Kanalarz kanalarz(KanalarzStepsRegistry stepsRegistry) {
+        return new Kanalarz(stepsRegistry);
+    }
+
+    @Bean
+    KanalarzBeanPostProcessor kanalarzBeanPostProcessor(
+        @Lazy Kanalarz kanalarz,
+        @Lazy KanalarzStepsRegistry stepsRegistry
+    ) {
+        return new KanalarzBeanPostProcessor(kanalarz, stepsRegistry);
     }
 }
