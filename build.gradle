@@ -1,31 +1,27 @@
-plugins {
-	id 'java'
-	id 'org.springframework.boot' version '3.5.3'
-	id 'io.spring.dependency-management' version '1.1.7'
-	id 'org.jetbrains.kotlin.jvm'
+// Existing content of build.gradle
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            groupId = 'your.group.id' // TODO: replace with your groupId
+            artifactId = 'kanalarz' // or your artifact name
+            version = '1.0.0'
+        }
+    }
+    repositories {
+        maven {
+            name = "OSSRH"
+            url = uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
+            credentials {
+                username = 'yourSonatypeUsername' // TODO: replace
+                password = 'yourSonatypePassword' // TODO: replace
+            }
+        }
+    }
 }
 
-group = 'com.gbujak'
-version = '0.0.1-SNAPSHOT'
-
-java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
-	}
-}
-
-repositories {
-	mavenCentral()
-}
-
-dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter'
-	implementation 'org.jetbrains.kotlin:kotlin-reflect'
-	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-	testImplementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-}
-
-tasks.named('test') {
-	useJUnitPlatform()
+signing {
+    sign publishing.publications.mavenJava
+    // TODO: Configure GPG key
 }
