@@ -7,7 +7,6 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Role;
 
 @Configuration
-@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 public class KanalarzConfiguration {
 
     @Bean
