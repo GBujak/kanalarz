@@ -18,12 +18,12 @@ public class Kanalarz {
 
     private final KanalarzStepsRegistry stepsRegistry;
     private final KanalarzSerialization serialization;
-    private final KanalarzPersistance persistance;
+    private final KanalarzPersistence persistance;
 
     Kanalarz(
         KanalarzStepsRegistry stepsRegistry,
         KanalarzSerialization serialization,
-        KanalarzPersistance persistance
+        KanalarzPersistence persistance
     ) {
         this.stepsRegistry = stepsRegistry;
         this.serialization = serialization;
@@ -110,7 +110,7 @@ public class Kanalarz {
         }
 
         var failed = error != null;
-        persistance.stepCompleted(new KanalarzPersistance.StepCompletedEvent(
+        persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
             context.getId(),
             UUID.randomUUID(),
             Collections.unmodifiableMap(context.fullMetadata()),

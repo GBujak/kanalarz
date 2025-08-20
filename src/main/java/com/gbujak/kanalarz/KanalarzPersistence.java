@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface KanalarzPersistance {
+public interface KanalarzPersistence {
 
     record StepStartedEvent(
         @NonNull UUID contextId,
