@@ -67,16 +67,22 @@ class KanalarzStepsRegistry {
 
         for (var param : stepInfo.paramsInfo) {
             if (param.isRollforwardOutput) {
-                if (!param.type.equals(rollforwardStep.returnType)) {
+                var expectedType =
+                    Utils.isStepOut(rollforwardStep.returnType)
+                        ? Utils.getTypeFromStepOut(rollforwardStep.returnType)
+                        : rollforwardStep.returnType;
+                if (!param.type.equals(expectedType)) {
                     throw new RuntimeException(
                         ("Rollback step [%s] declares a rollforward step [%s] output parameter [%s] but the return " +
-                            "type of the rollforward step and that parameter are different! ([%s] and [%s])")
+                            "type of the rollforward step and that parameter don't match! (rollback param is [%s] " +
+                            "and rollforward param is [%s]). Expected rollback param to be [%s]")
                             .formatted(
                                 rollbackIdentifier,
                                 stepIdentifier,
                                 param.paramName,
                                 param.type.getTypeName(),
-                                rollforwardStep.returnType.getTypeName()
+                                rollforwardStep.returnType.getTypeName(),
+                                expectedType.getTypeName()
                             )
                     );
                 }

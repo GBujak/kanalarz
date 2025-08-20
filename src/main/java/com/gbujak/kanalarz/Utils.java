@@ -7,12 +7,14 @@ import kotlin.reflect.KFunction;
 import kotlin.reflect.KParameter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.lang.NonNull;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.Optional;
 
 class Utils {
 
@@ -195,5 +197,28 @@ class Utils {
             return clazz.equals(StepOut.class);
         }
         return false;
+    }
+
+    @NonNull
+    static Type getTypeFromStepOut(Type stepOutType) {
+        if (stepOutType instanceof ParameterizedType pt) {
+            var arguments = pt.getActualTypeArguments();
+            if (arguments.length != 1) {
+                throw new RuntimeException(
+                    "Given type [%s] has zero or more than one type parameters, can't determine type parameter"
+                        .formatted(pt.getTypeName())
+                );
+            }
+            return arguments[0];
+        } else if (stepOutType instanceof Class<?> clazz && clazz.equals(StepOut.class)) {
+            throw new RuntimeException(
+                "Given type [%s] is a Class, not a parameterized type. Can't get the type parameter"
+                    .formatted(stepOutType.getTypeName())
+            );
+        } else {
+            throw new RuntimeException(
+                "Given type [%s] is not a StepOut type reference".formatted(stepOutType.getTypeName())
+            );
+        }
     }
 }

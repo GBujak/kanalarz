@@ -8,8 +8,8 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 public class Kanalarz {
@@ -30,6 +30,7 @@ public class Kanalarz {
         this.persistance = persistance;
     }
 
+    private static final AtomicInteger activeContexts = new AtomicInteger();
     private static final ThreadLocal<KanalarzContext> kanalarzContextThreadLocal = new ThreadLocal<>();
 
     @Nullable
@@ -60,7 +61,19 @@ public class Kanalarz {
 
         var context = context();
         if (context == null) {
-            return method.invoke(target, arguments);
+            try {
+                return method.invoke(target, arguments);
+            } catch (Throwable err) {
+                if (step.fallible()) {
+                    return StepOut.err(err);
+                } else {
+                    throw err;
+                }
+            }
+        }
+
+        if (!cancellableContexts.contains(context.getId())) {
+            throw new RuntimeException("Context was cancelled");
         }
 
         var stepInfo = stepsRegistry.getStepInfo(stepsHolder, step);
@@ -75,7 +88,7 @@ public class Kanalarz {
                 (StepOut<?>)
                     (Utils.isStepOut(stepInfo.returnType)
                         ? result
-                        : StepOut.ok(result));
+                        : StepOut.of(result));
             resultSerialized = serialization.serializeStepExecution(
                 serializeParametersInfo,
                 new KanalarzSerialization.SerializeReturnInfo(
@@ -93,7 +106,6 @@ public class Kanalarz {
                     stepInfo.returnIsSecret
                 )
             );
-
             error = e;
         }
 
@@ -154,15 +166,17 @@ public class Kanalarz {
         try {
             var context = new KanalarzContext(this);
             newContextId = context.getId();
-            cancellableContexts.add(newContextId);
             context.putAllMetadata(metadata);
             kanalarzContextThreadLocal.set(context);
+            activeContexts.incrementAndGet();
+            cancellableContexts.add(newContextId);
             return body.apply(context);
         } finally {
             kanalarzContextThreadLocal.remove();
+            activeContexts.decrementAndGet();
             if (newContextId != null) {
                 cancellableContexts.remove(newContextId);
-            };
+            }
         }
     }
 }
