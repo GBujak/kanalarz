@@ -109,16 +109,17 @@ public class Kanalarz {
             error = e;
         }
 
+        var failed = error != null;
         persistance.stepCompleted(new KanalarzPersistance.StepCompletedEvent(
             context.getId(),
             UUID.randomUUID(),
             Collections.unmodifiableMap(context.fullMetadata()),
             step.identifier(),
             resultSerialized,
-            /* failed = */ error != null
+            failed
         ));
 
-        if (error != null) {
+        if (failed) {
             if (step.fallible()) {
                 return StepOut.err(error);
             } else {
