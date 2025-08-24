@@ -8,7 +8,6 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -119,6 +118,7 @@ public class Kanalarz {
 
         Object result = null;
         Throwable error = null;
+        boolean unwrappedStepOut = false;
         String resultSerialized;
         try {
             result = method.invoke(target, arguments);
@@ -129,6 +129,7 @@ public class Kanalarz {
                 );
             }
             if (result instanceof StepOut<?> stepOutResult) {
+                unwrappedStepOut = true;
                 result = stepOutResult.valueOrNull();
                 error = stepOutResult.errorOrNull();
             }
@@ -175,7 +176,10 @@ public class Kanalarz {
                 }
             }
         } else {
-            return result;
+            return unwrappedStepOut
+                // StepOut can't hold a null value, so unwrapped value should never be null
+                ? StepOut.of(Objects.requireNonNull(result))
+                : result;
         }
     }
 

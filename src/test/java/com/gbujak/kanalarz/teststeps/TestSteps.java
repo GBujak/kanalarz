@@ -2,8 +2,6 @@ package com.gbujak.kanalarz.teststeps;
 
 import com.gbujak.kanalarz.StepOut;
 import com.gbujak.kanalarz.annotations.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 

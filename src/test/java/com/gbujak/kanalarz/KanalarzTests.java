@@ -12,10 +12,14 @@ public class KanalarzTests {
 
     @Autowired private TestSteps testSteps;
     @Autowired private TestStepsKotlin testStepsKotlin;
+    @Autowired private Kanalarz kanalarz;
 
     @Test
     void stepsCalled() {
-        testSteps.uppercaseStep(new TestUser("dupa"));
+        kanalarz.inContext(ctx -> {
+            testSteps.uppercaseStep(new TestUser("dupa"));
+            return null;
+        });
     }
 
     @Test
