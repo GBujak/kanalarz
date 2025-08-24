@@ -16,15 +16,15 @@ public class TestSteps {
 
     @NonNull
     @Step(identifier = "uppercase-step", fallible = true)
-    public StepOut<Optional<String>> uppercaseStep(TestUser testUser) {
+    public StepOut<String> uppercaseStep(TestUser testUser) {
         var oldName = testUser.name();
         testUser.setName(testUser.name().toUpperCase());
-        return StepOut.ofNullable(oldName);
+        return StepOut.of(oldName);
     }
 
     @Rollback(forStep = "uppercase-step")
-    public void uppercaseRollback(TestUser testUser, @NonNull @RollforwardOut Optional<String> oldName) {
-        testUser.setName(oldName.get());
+    public void uppercaseRollback(TestUser testUser, @NonNull @RollforwardOut String oldName) {
+        testUser.setName(oldName);
     }
 
     @Step(identifier = "test-generic")

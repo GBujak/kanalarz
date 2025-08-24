@@ -279,6 +279,9 @@ public class Kanalarz {
 
                 if (paramInfo.isRollforwardOutput) {
                     parameters[i] = deserializedParams.executionResult();
+                    if (parameters[i] instanceof StepOut<?> stepOut) {
+                        parameters[i] = stepOut.valueOrThrow();
+                    }
                 } else {
                     parameters[i] = deserializedParams.parameters().get(paramInfo.paramName);
                 }
@@ -311,7 +314,7 @@ public class Kanalarz {
                 }
 
                 var serializedResult = serialization.serializeStepExecution(
-                    makeSerializeParametersInfo(parameters, stepInfo),
+                    makeSerializeParametersInfo(parameters, rollback),
                     new KanalarzSerialization.SerializeReturnInfo(
                         rollback.returnType,
                         result,
@@ -320,16 +323,17 @@ public class Kanalarz {
                     )
                 );
 
+                boolean failed = error != null;
                 persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
                     contextId,
                     stepId,
                     context().fullMetadata(),
                     KanalarzStepsRegistry.stepIdentifier(rollback.stepsHolder, rollback.rollback),
                     serializedResult,
-                    error != null
+                    failed
                 ));
 
-                if (!rollback.rollback.fallible()) {
+                if (failed && !rollback.rollback.fallible()) {
                     if (error instanceof RuntimeException re) {
                         throw re;
                     } else {

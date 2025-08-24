@@ -40,7 +40,7 @@ public class TestSerialization implements KanalarzSerialization {
         var result = mapper.createObjectNode();
         result.put("secret", returnInfo.secret());
         result.put("type", returnInfo.type().getTypeName());
-        result.put("error", returnInfo.error() + "");
+        result.put("error", returnInfo.error() != null ? returnInfo.error().toString() : null);
         result.set("value", mapper.valueToTree(returnInfo.value()));
         serialized.set("returnInfo", result);
 

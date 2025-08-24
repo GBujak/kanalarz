@@ -11,7 +11,7 @@ public class TestUser {
         this.name = name;
     }
 
-    String name() {
+    public String name() {
         return name;
     }
 
