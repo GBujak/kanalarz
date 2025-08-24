@@ -18,6 +18,7 @@ class StepInfoClasses {
         @Nullable Step step;
         @Nullable Rollback rollback;
         @Nullable String description;
+        StepsHolder stepsHolder;
         Type returnType;
         boolean isReturnTypeNonNullable;
         List<ParamInfo> paramsInfo;
@@ -28,29 +29,33 @@ class StepInfoClasses {
         public static StepInfo createNew(
             Object target,
             Method method,
+            StepsHolder stepsHolder,
             Step step,
             boolean returnIsSecret
         ) {
-            return doCreateNew(target, method, step, null, returnIsSecret);
+            return doCreateNew(target, method, stepsHolder, step, null, returnIsSecret);
         }
 
         public static StepInfo createNew(
             Object target,
             Method method,
+            StepsHolder stepsHolder,
             Rollback rollback,
             boolean returnIsSecret
         ) {
-            return doCreateNew(target, method, null, rollback, returnIsSecret);
+            return doCreateNew(target, method, stepsHolder, null, rollback, returnIsSecret);
         }
 
         private static StepInfo doCreateNew(
             Object target,
             Method method,
+            StepsHolder stepsHolder,
             @Nullable Step step,
             @Nullable Rollback rollback,
             boolean returnIsSecret
         ) {
             var stepInfo = new StepInfo();
+            stepInfo.stepsHolder = stepsHolder;
             stepInfo.target = target;
             stepInfo.method = method;
             stepInfo.step = step;

@@ -6,6 +6,7 @@ import org.springframework.lang.Nullable;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public interface KanalarzSerialization {
 
@@ -17,7 +18,8 @@ public interface KanalarzSerialization {
     ) {}
     record SerializeReturnInfo(
         @NonNull Type type,
-        @Nullable StepOut<?> value,
+        @Nullable Object value,
+        @Nullable Throwable error,
         boolean secret
     ) {}
     @NonNull
@@ -32,7 +34,8 @@ public interface KanalarzSerialization {
     ) {}
     record DeserializeParametersResult(
         @NonNull Map<String, Object> parameters,
-        @Nullable StepOut<?> returnValue
+        @Nullable Object executionResult,
+        @Nullable Throwable executionError
     ) {}
     @NonNull
     DeserializeParametersResult deserializeParameters(

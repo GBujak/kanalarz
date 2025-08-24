@@ -32,7 +32,8 @@ public interface KanalarzPersistence {
     record StepExecutedInfo(
         @NonNull UUID stepId,
         @NonNull String stepIdentifier,
-        @NonNull String serializedExecutionResult
+        @NonNull String serializedExecutionResult,
+        boolean failed
     ) {}
     @NonNull
     List<StepExecutedInfo> getExecutedStepsInContextInOrderOfExecution(@NonNull UUID contextId);

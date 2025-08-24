@@ -8,6 +8,8 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -31,7 +33,7 @@ public class Kanalarz {
     }
 
     private static final AtomicInteger activeContexts = new AtomicInteger();
-    private static final ThreadLocal<KanalarzContext> kanalarzContextThreadLocal = new ThreadLocal<>();
+    private static final ThreadLocal<KanalarzContext> kanalarzContextThreadLocal = new InheritableThreadLocal<>();
 
     @Nullable
     public static KanalarzContext context() {
@@ -54,7 +56,7 @@ public class Kanalarz {
         MethodInvocation invocation,
         StepsHolder stepsHolder,
         Step step
-    ) throws Throwable {
+    ) {
 
         var method = invocation.getMethod();
         var arguments = invocation.getArguments();
@@ -63,14 +65,50 @@ public class Kanalarz {
         if (context == null) {
             try {
                 return method.invoke(target, arguments);
-            } catch (Throwable err) {
+            } catch (Throwable error) {
                 if (step.fallible()) {
-                    return StepOut.err(err);
+                    return StepOut.err(error);
                 } else {
-                    throw err;
+                    if (error instanceof RuntimeException re) {
+                        throw re;
+                    } else {
+                        throw new RuntimeException(error);
+                    }
                 }
             }
         }
+
+        return context.withStepId(
+            stepId -> handleInContextMethodExecution(
+                target,
+                method,
+                arguments,
+                stepsHolder,
+                step,
+                stepId,
+                context
+            )
+        );
+    }
+
+    private Object handleInContextMethodExecution(
+        Object target,
+        Method method,
+        Object[] arguments,
+        StepsHolder stepsHolder,
+        Step step,
+        UUID stepId,
+        KanalarzContext context
+    ) {
+
+        persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
+            context.getId(),
+            stepId,
+            Optional.empty(),
+            context.fullMetadata(),
+            KanalarzStepsRegistry.stepIdentifier(stepsHolder, step),
+            step.fallible()
+        ));
 
         if (!cancellableContexts.contains(context.getId())) {
             throw new RuntimeException("Context was cancelled");
@@ -84,37 +122,44 @@ public class Kanalarz {
         String resultSerialized;
         try {
             result = method.invoke(target, arguments);
-            var stepOutResult =
-                (StepOut<?>)
-                    (Utils.isStepOut(stepInfo.returnType)
-                        ? result
-                        : StepOut.of(result));
+            if (step.fallible() && result == null) {
+                throw new RuntimeException(
+                    "Fallible step [%s] returned null instead of a StepOut instance!"
+                        .formatted(KanalarzStepsRegistry.stepIdentifier(stepsHolder, step))
+                );
+            }
+            if (result instanceof StepOut<?> stepOutResult) {
+                result = stepOutResult.valueOrNull();
+                error = stepOutResult.errorOrNull();
+            }
             resultSerialized = serialization.serializeStepExecution(
                 serializeParametersInfo,
                 new KanalarzSerialization.SerializeReturnInfo(
                     stepInfo.returnType,
-                    stepOutResult,
+                    result,
+                    error,
                     stepInfo.returnIsSecret
                 )
             );
         } catch (Throwable e) {
+            error = e;
             resultSerialized = serialization.serializeStepExecution(
                 serializeParametersInfo,
                 new KanalarzSerialization.SerializeReturnInfo(
                     stepInfo.returnType,
-                    StepOut.err(e),
+                    result,
+                    error,
                     stepInfo.returnIsSecret
                 )
             );
-            error = e;
         }
 
         var failed = error != null;
         persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
             context.getId(),
-            UUID.randomUUID(),
+            stepId,
             Collections.unmodifiableMap(context.fullMetadata()),
-            step.identifier(),
+            KanalarzStepsRegistry.stepIdentifier(stepsHolder, step),
             resultSerialized,
             failed
         ));
@@ -123,7 +168,11 @@ public class Kanalarz {
             if (step.fallible()) {
                 return StepOut.err(error);
             } else {
-                throw error;
+                if (error instanceof RuntimeException re) {
+                    throw re;
+                } else {
+                    throw new RuntimeException(error);
+                }
             }
         } else {
             return result;
@@ -164,6 +213,8 @@ public class Kanalarz {
         }
 
         UUID newContextId = null;
+        T result = null;
+        Throwable error = null;
         try {
             var context = new KanalarzContext(this);
             newContextId = context.getId();
@@ -171,7 +222,10 @@ public class Kanalarz {
             kanalarzContextThreadLocal.set(context);
             activeContexts.incrementAndGet();
             cancellableContexts.add(newContextId);
-            return body.apply(context);
+            result = body.apply(context);
+        } catch (Throwable e) {
+            performRollback(Objects.requireNonNull(newContextId));
+            throw e;
         } finally {
             kanalarzContextThreadLocal.remove();
             activeContexts.decrementAndGet();
@@ -179,6 +233,116 @@ public class Kanalarz {
                 cancellableContexts.remove(newContextId);
             }
         }
+
+        return result;
+    }
+
+    private void performRollback(@NonNull UUID contextId) {
+        var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(contextId);
+        for (var rollforward : executedSteps.reversed()) {
+            if (rollforward.failed()) {
+                continue;
+            }
+
+            var stepInfo = stepsRegistry.getStepInfoOrThrow(rollforward.stepIdentifier());
+            if (stepInfo.rollback != null) {
+                continue;
+            }
+            var rollback = stepsRegistry.getStepRollbackInfo(rollforward.stepIdentifier()).orElse(null);
+            if (rollback == null) {
+                continue;
+            }
+
+            if (rollback.rollback == null) {
+                throw new RuntimeException(
+                    "Library logic error: Step [%s] is rollback but had no rollback info"
+                        .formatted(rollback)
+                );
+            }
+
+            var deserializedParams = serialization.deserializeParameters(
+                rollforward.serializedExecutionResult(),
+                makeDeserializeParamsInfo(stepInfo.paramsInfo),
+                stepInfo.returnType
+            );
+            if (deserializedParams.executionError() != null) {
+                continue;
+            }
+
+            Object[] parameters = new Object[rollback.paramsInfo.size()];
+            for (int i = 0; i < rollback.paramsInfo.size(); i++) {
+                var paramInfo = rollback.paramsInfo.get(i);
+
+                if (paramInfo.isRollforwardOutput) {
+                    parameters[i] = deserializedParams.executionResult();
+                } else {
+                    parameters[i] = deserializedParams.parameters().get(paramInfo.paramName);
+                }
+
+                if (paramInfo.isNonNullable && parameters[i] == null) {
+                    throw new RuntimeException(
+                        "Trying to execute rollback for step [%s] but the non-nullable parameter [%s] is null"
+                            .formatted(rollforward.stepIdentifier(), paramInfo.paramName)
+                    );
+                }
+            }
+
+            contextOrThrow().<Void>withStepId(stepId -> {
+
+                persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
+                    contextId,
+                    stepId,
+                    Optional.of(rollforward.stepId()),
+                    contextOrThrow().fullMetadata(),
+                    KanalarzStepsRegistry.stepIdentifier(rollback.stepsHolder, rollback.rollback),
+                    rollback.rollback.fallible()
+                ));
+
+                Object result = null;
+                Throwable error = null;
+                try {
+                    result = rollback.method.invoke(rollback.target, parameters);
+                } catch (Throwable e) {
+                    error = e;
+                }
+
+                var serializedResult = serialization.serializeStepExecution(
+                    makeSerializeParametersInfo(parameters, stepInfo),
+                    new KanalarzSerialization.SerializeReturnInfo(
+                        rollback.returnType,
+                        result,
+                        error,
+                        rollback.returnIsSecret
+                    )
+                );
+
+                persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
+                    contextId,
+                    stepId,
+                    context().fullMetadata(),
+                    KanalarzStepsRegistry.stepIdentifier(rollback.stepsHolder, rollback.rollback),
+                    serializedResult,
+                    error != null
+                ));
+
+                if (!rollback.rollback.fallible()) {
+                    if (error instanceof RuntimeException re) {
+                        throw re;
+                    } else {
+                        throw new RuntimeException(error);
+                    }
+                }
+
+                return null;
+            });
+        }
+    }
+
+    private List<KanalarzSerialization.DeserializeParameterInfo>
+    makeDeserializeParamsInfo(List<StepInfoClasses.ParamInfo> paramsInfo) {
+        return paramsInfo.stream()
+            .map(it -> new KanalarzSerialization.DeserializeParameterInfo(it.paramName, it.type))
+            .toList();
     }
 }
 

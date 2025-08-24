@@ -30,11 +30,18 @@ class KanalarzStepsRegistry {
         if (this.steps.containsKey(stepIdentifier)) {
             throw new RuntimeException("Duplicated step identifier %s".formatted(stepIdentifier));
         }
-        var stepInfo = StepInfoClasses.StepInfo.createNew(target, method, step, returnIsSecret);
+        var stepInfo = StepInfoClasses.StepInfo.createNew(target, method, stepsHolder, step, returnIsSecret);
         if (step.fallible() && !isStepOut(stepInfo.returnType)) {
             throw new RuntimeException(
                 "Fallible steps must return a [%s] instance so the error can be wrapped and returned."
                     .formatted(StepOut.class.getCanonicalName())
+            );
+        }
+        if (step.fallible() && !stepInfo.isReturnTypeNonNullable) {
+            throw new RuntimeException(
+                "Fallible steps must be non-nullable. They return a StepOut object which is comparable to java's " +
+                    "Optional. Returning null from a function that returns a StepOut should always be considered " +
+                    "an error."
             );
         }
         steps.put(stepIdentifier, stepInfo);
@@ -61,7 +68,7 @@ class KanalarzStepsRegistry {
             );
         }
 
-        var stepInfo = StepInfoClasses.StepInfo.createNew(target, method, rollback, returnIsSecret);
+        var stepInfo = StepInfoClasses.StepInfo.createNew(target, method, stepsHolder, rollback, returnIsSecret);
 
         for (var param : stepInfo.paramsInfo) {
             if (param.isRollforwardOutput) {
@@ -87,7 +94,7 @@ class KanalarzStepsRegistry {
                 if (param.isNonNullable != rollforwardStep.isReturnTypeNonNullable) {
                     throw new RuntimeException(
                         ("Rollback step [%s] declares a rollforward step [%s] output parameter [%s] but the return " +
-                            "type of the rollforward step and that parameter have different nullability markings!")
+                            "type of the rollforward step and that parameter have different nullability!")
                             .formatted(
                                 rollbackIdentifier,
                                 stepIdentifier,
@@ -136,13 +143,13 @@ class KanalarzStepsRegistry {
     }
 
     @NonNull
-    Optional<StepInfoClasses.StepInfo> getStepRollbackInfo(StepsHolder stepsHolder, Step step) {
-        return Optional.of(stepIdentifier(stepsHolder, step))
+    Optional<StepInfoClasses.StepInfo> getStepRollbackInfo(String stepIdentifier) {
+        return Optional.of(stepIdentifier)
             .map(this.rollbackStepsForRollforwardSteps::get)
             .map(this::getStepInfoOrThrow);
     }
 
-    private StepInfoClasses.StepInfo getStepInfoOrThrow(String identifier) {
+    StepInfoClasses.StepInfo getStepInfoOrThrow(String identifier) {
         return Optional.ofNullable(this.steps.get(identifier))
             .orElseThrow(() -> new RuntimeException(
                 "Could not find step for identifier [%s]".formatted(identifier))
@@ -150,17 +157,17 @@ class KanalarzStepsRegistry {
     }
 
     @NotNull
-    private static String stepIdentifier(StepsHolder stepsHolder, Step step) {
+    static String stepIdentifier(StepsHolder stepsHolder, Step step) {
         return "%s:%s".formatted(stepsHolder.identifier(), step.identifier());
     }
 
     @NotNull
-    private static String stepIdentifier(StepsHolder stepsHolder, Rollback rollback) {
+    static String stepIdentifier(StepsHolder stepsHolder, Rollback rollback) {
         return "%s:%s".formatted(stepsHolder.identifier(), rollback.forStep());
     }
 
     @NotNull
-    private static String rollbackIdentifier(StepsHolder stepsHolder, Rollback rollback) {
+    static String rollbackIdentifier(StepsHolder stepsHolder, Rollback rollback) {
         return "%s:rollback".formatted(stepIdentifier(stepsHolder, rollback));
     }
 }

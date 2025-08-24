@@ -4,6 +4,7 @@ import com.gbujak.kanalarz.StepOut;
 import com.gbujak.kanalarz.annotations.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.Optional;
 @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 public class TestSteps {
 
+    @NonNull
     @Step(identifier = "uppercase-step", fallible = true)
     public StepOut<Optional<String>> uppercaseStep(TestUser testUser) {
         var oldName = testUser.name();
@@ -23,7 +25,7 @@ public class TestSteps {
     }
 
     @Rollback(forStep = "uppercase-step")
-    public void uppercaseRollback(TestUser testUser, @RollforwardOut Optional<String> oldName) {
+    public void uppercaseRollback(TestUser testUser, @NonNull @RollforwardOut Optional<String> oldName) {
         testUser.setName(oldName.get());
     }
 

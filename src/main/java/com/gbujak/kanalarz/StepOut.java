@@ -36,6 +36,11 @@ public class StepOut<T> {
     }
 
     @NonNull
+    public static <T> StepOut<Optional<T>> empty(@Nullable T value) {
+        return StepOut.of(Optional.empty());
+    }
+
+    @NonNull
     public static <T> StepOut<T> err(@NonNull Throwable error) {
         Objects.requireNonNull(
             error,
@@ -57,6 +62,16 @@ public class StepOut<T> {
     @Nullable
     public T valueOrNull() {
         return value;
+    }
+
+    @NonNull
+    public Optional<Throwable> error() {
+        return Optional.ofNullable(error);
+    }
+
+    @Nullable
+    public Throwable errorOrNull() {
+        return error;
     }
 
     @NonNull
