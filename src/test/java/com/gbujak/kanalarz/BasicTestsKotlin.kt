@@ -20,6 +20,7 @@ import java.util.*
 
 @Service
 internal class TestNameServiceKotlin {
+
     private var name: String? = null
 
     fun set(value: String?): String? {
@@ -41,6 +42,7 @@ internal class TestNameServiceKotlin {
 @Component
 @StepsHolder(identifier = "test-steps-kotlin")
 internal open class TestStepsKotlin {
+
     @Autowired
     private lateinit var testNameService: TestNameServiceKotlin
 
@@ -63,6 +65,7 @@ internal open class TestStepsKotlin {
 
 @SpringBootTest
 class BasicTestsKotlin {
+
     @Autowired
     private lateinit var kanalarz: Kanalarz
 
