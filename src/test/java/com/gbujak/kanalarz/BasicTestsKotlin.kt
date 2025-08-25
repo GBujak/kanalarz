@@ -2,14 +2,12 @@ package com.gbujak.kanalarz
 
 import com.gbujak.kanalarz.KanalarzException.KanalarzStepFailedException
 import com.gbujak.kanalarz.KanalarzException.KanalarzThrownOutsideOfStepException
-import com.gbujak.kanalarz.KanalarzPersistence.StepExecutedInfo
 import com.gbujak.kanalarz.annotations.Rollback
 import com.gbujak.kanalarz.annotations.RollforwardOut
 import com.gbujak.kanalarz.annotations.Step
 import com.gbujak.kanalarz.annotations.StepsHolder
-import org.assertj.core.api.AssertionsForClassTypes
-import org.assertj.core.api.AssertionsForClassTypes.assertThat
-import org.assertj.core.api.AssertionsForInterfaceTypes
+import org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy
+import org.assertj.core.api.AssertionsForInterfaceTypes.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -105,7 +103,7 @@ class BasicTestsKotlin {
 
         assertThat(testNameService.name()).isEqualTo(null)
 
-        AssertionsForClassTypes.assertThatThrownBy {
+        assertThatThrownBy {
             kanalarz.newContext().resumes(contextId).start {
                 testSteps.setName(testNewName)
                 assertThat(testNameService.name()).isEqualTo(testNewName)
@@ -116,11 +114,8 @@ class BasicTestsKotlin {
             .hasCause(exception)
 
         assertThat(testNameService.name()).isNull()
-        AssertionsForInterfaceTypes.assertThat<StepExecutedInfo?>(
-            persistence.getExecutedStepsInContextInOrderOfExecution(
-                contextId
-            )
-        ).hasSize(2)
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            .hasSize(2)
     }
 
     @Test
@@ -130,7 +125,7 @@ class BasicTestsKotlin {
 
         assertThat(testNameService.name()).isNull()
 
-        AssertionsForClassTypes.assertThatThrownBy {
+        assertThatThrownBy {
             kanalarz.newContext().resumes(contextId).start {
                 testSteps.setName(testNewName)
                 assertThat(testNameService.name()).isEqualTo(testNewName)
@@ -141,11 +136,8 @@ class BasicTestsKotlin {
             .hasCauseExactlyInstanceOf(RuntimeException::class.java)
 
         assertThat(testNameService.name()).isNull()
-        AssertionsForInterfaceTypes.assertThat<StepExecutedInfo?>(
-            persistence.getExecutedStepsInContextInOrderOfExecution(
-                contextId
-            )
-        ).hasSize(3)
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            .hasSize(3)
     }
 
     @Test
@@ -161,7 +153,7 @@ class BasicTestsKotlin {
             testSteps.setName(testNewName2)
         }
 
-        AssertionsForClassTypes.assertThatThrownBy {
+        assertThatThrownBy {
             kanalarz.newContext().resumes(contextId).start {
                 testSteps.setName(testNewName)
                 testSteps.setName(testNewName2)
@@ -172,10 +164,7 @@ class BasicTestsKotlin {
             .hasCauseExactlyInstanceOf(RuntimeException::class.java)
 
         assertThat(testNameService.name()).isNull()
-        AssertionsForInterfaceTypes.assertThat(
-            persistence.getExecutedStepsInContextInOrderOfExecution(
-                contextId
-            )
-        ).hasSize(9)
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            .hasSize(9)
     }
 }
