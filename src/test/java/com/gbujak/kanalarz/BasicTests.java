@@ -4,6 +4,7 @@ import com.gbujak.kanalarz.annotations.Rollback;
 import com.gbujak.kanalarz.annotations.RollforwardOut;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -13,15 +14,17 @@ import org.springframework.stereotype.Service;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
+import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
 @Service
 class TestNameService {
 
     private String name;
 
-    public String setAndGet(String value) {
+    public String set(String value) {
         if (Objects.equals(name, value)) {
             throw new RuntimeException("Name already equals that");
         }
@@ -33,6 +36,10 @@ class TestNameService {
     public String name() {
         return name;
     }
+
+    public void clear() {
+        name = null;
+    }
 }
 
 @Component
@@ -42,18 +49,14 @@ class TestSteps {
     @Autowired private TestNameService testNameService;
 
     @NonNull
-    @Step(identifier = "set-and-get-name", fallible = false)
-    public StepOut<Optional<String>> setAndGetName(String newName) {
-        if (newName.equals("test")) {
-            throw new RuntimeException("stepfailed");
-        }
-        return StepOut.ofNullable(testNameService.setAndGet(newName));
+    @Step(identifier = "set-name")
+    public Optional<String> setName(String newName) {
+        return Optional.ofNullable(testNameService.set(newName));
     }
 
-    @Rollback(forStep = "set-and-get-name", fallible = false)
-    public void setAndGetNameRollback(@NonNull @RollforwardOut Optional<String> test) {
-        System.out.println(test);
-        throw new RuntimeException("rollback failed test");
+    @Rollback(forStep = "set-name", fallible = true)
+    public void setNameRollback(@NonNull @RollforwardOut Optional<String> test) {
+        testNameService.set(test.orElse(null));
     }
 }
 
@@ -62,16 +65,99 @@ public class BasicTests {
 
     @Autowired private Kanalarz kanalarz;
     @Autowired private TestSteps testSteps;
+    @Autowired private TestNameService testNameService;
+    @Autowired private KanalarzPersistence persistence;
+
+    @BeforeEach
+    void beforeEach() {
+        testNameService.clear();
+    }
 
     @Test
-    void test() {
-        var testNewName = "test";
+    void stepOutsideOfContext() {
+        assertThat(testSteps.setName("test")).isEqualTo(Optional.empty());
+    }
 
-        StepOut<Optional<String>> result = kanalarz.inContext(ctx -> {
-            var newName = testSteps.setAndGetName(testNewName);
-            throw new RuntimeException("test");
+    @Test
+    void basicRollforward() {
+        assertThat(testNameService.name()).isNull();
+        kanalarz.newContext().<Void>run(ctx -> {
+            assertThat(testSteps.setName("test")).isEqualTo(Optional.empty());
+            return null;
+        });
+        assertThat(testNameService.name()).isEqualTo("test");
+    }
+
+    @Test
+    void basicRollbackOutsideOfStep() {
+        var testNewName = "test";
+        var exception = new RuntimeException("test");
+        var contextId = UUID.randomUUID();
+
+        assertThat(testNameService.name()).isEqualTo(null);
+
+        assertThatThrownBy(() ->
+            kanalarz.newContext().resumes(contextId).run(ctx -> {
+                testSteps.setName(testNewName);
+                assertThat(testNameService.name()).isEqualTo(testNewName);
+                throw exception;
+            })
+        )
+            .isExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
+            .hasCause(exception);
+
+        assertThat(testNameService.name()).isNull();
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId)).hasSize(2);
+    }
+
+    @Test
+    void basicRollbackInsideStep() {
+        var testNewName = "test";
+        var contextId = UUID.randomUUID();
+
+        assertThat(testNameService.name()).isNull();
+
+        assertThatThrownBy(() ->
+            kanalarz.newContext().resumes(contextId).run(ctx -> {
+                testSteps.setName(testNewName);
+                assertThat(testNameService.name()).isEqualTo(testNewName);
+                testSteps.setName(testNewName);
+                return null;
+            })
+        )
+            .isExactlyInstanceOf(KanalarzException.KanalarzStepFailedException.class)
+            .hasCauseExactlyInstanceOf(RuntimeException.class);
+
+        assertThat(testNameService.name()).isNull();
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId)).hasSize(3);
+    }
+
+    @Test
+    void basicResumedContextRollback() {
+        var testNewName = "test";
+        var testNewName2 = "test2";
+        var contextId = UUID.randomUUID();
+
+        assertThat(testNameService.name()).isNull();
+
+        kanalarz.newContext().resumes(contextId).run(ctx -> {
+            testSteps.setName(testNewName);
+            testSteps.setName(testNewName2);
+            return null;
         });
 
-        assertThat(result.valueOrThrow()).isEqualTo(Optional.empty());
+        assertThatThrownBy(() ->
+            kanalarz.newContext().resumes(contextId).run(ctx -> {
+                testSteps.setName(testNewName);
+                testSteps.setName(testNewName2);
+                testSteps.setName(testNewName2);
+                return null;
+            })
+        )
+            .isExactlyInstanceOf(KanalarzException.KanalarzStepFailedException.class)
+            .hasCauseExactlyInstanceOf(RuntimeException.class);
+
+        assertThat(testNameService.name()).isNull();
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId)).hasSize(9);
     }
 }

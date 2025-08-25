@@ -114,6 +114,9 @@ public class StepOut<T> {
      */
     @NonNull
     public static Type unwrapStepOutType(Type stepOutType) {
+        if (!StepOut.isTypeStepOut(stepOutType)) {
+            return stepOutType;
+        }
         if (stepOutType instanceof ParameterizedType pt) {
             var arguments = pt.getActualTypeArguments();
             if (arguments.length != 1) {

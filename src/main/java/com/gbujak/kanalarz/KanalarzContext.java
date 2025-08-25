@@ -14,13 +14,14 @@ import java.util.function.Function;
 
 public class KanalarzContext {
 
-    private final UUID id = UUID.randomUUID();
+    private final UUID id;
     private final Kanalarz kanalarz;
     private final Map<String, String> metadata = new ConcurrentHashMap<>();
     private final AtomicReference<UUID> runningStepId = new AtomicReference<>();
 
-    KanalarzContext(Kanalarz kanalarz) {
+    KanalarzContext(Kanalarz kanalarz, @Nullable UUID resumesId) {
         this.kanalarz = kanalarz;
+        this.id = resumesId != null ? resumesId : UUID.randomUUID();
     }
 
     @NonNull

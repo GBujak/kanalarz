@@ -12,6 +12,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class Kanalarz {
@@ -207,11 +208,16 @@ public class Kanalarz {
         return serializeParametersInfo;
     }
 
-    public <T> T inContext(Function<KanalarzContext, T> body) {
-        return inContext(Map.of(), body);
+    @NonNull
+    public KanalarzContextBuilder newContext() {
+        return new KanalarzContextBuilder();
     }
 
-    public <T> T inContext(Map<String, String> metadata, Function<KanalarzContext, T> body) {
+    private <T> T inContext(
+        @NonNull Map<String, String> metadata,
+        @Nullable UUID resumesContext,
+        @NonNull Function<KanalarzContext, T> body
+    ) {
         KanalarzContext previous = kanalarzContextThreadLocal.get();
         if (previous != null) {
             throw new KanalarzException.KanalarzIllegalUsageException(
@@ -220,16 +226,14 @@ public class Kanalarz {
         }
 
         UUID newContextId = null;
-        T result = null;
-        Throwable error = null;
         try {
-            var context = new KanalarzContext(this);
+            var context = new KanalarzContext(this, resumesContext);
             newContextId = context.getId();
             context.putAllMetadata(metadata);
             kanalarzContextThreadLocal.set(context);
             activeContexts.incrementAndGet();
             cancellableContexts.add(newContextId);
-            result = body.apply(context);
+            return body.apply(context);
         } catch (KanalarzException.KanalarzInternalError e) {
             throw e;
         } catch (KanalarzException.KanalarzStepFailedException e) {
@@ -245,8 +249,6 @@ public class Kanalarz {
                 cancellableContexts.remove(newContextId);
             }
         }
-
-        return result;
     }
 
     private void performRollback(@NonNull UUID contextId, Throwable originalError) {
@@ -358,6 +360,31 @@ public class Kanalarz {
         return paramsInfo.stream()
             .map(it -> new KanalarzSerialization.DeserializeParameterInfo(it.paramName, it.type))
             .toList();
+    }
+
+    public class KanalarzContextBuilder {
+
+        @Nullable
+        private UUID resumeContext;
+
+        @NonNull
+        private final Map<String, String> metadata = new HashMap<>();
+
+        @NonNull
+        public KanalarzContextBuilder resumes(@NonNull UUID resumes) {
+            this.resumeContext = resumes;
+            return this;
+        }
+
+        @NonNull
+        public KanalarzContextBuilder metadata(@NonNull String key, @NonNull String value) {
+            metadata.put(key, value);
+            return this;
+        }
+
+        public <T> T run(Function<KanalarzContext, T> block) {
+            return inContext(metadata, resumeContext, block);
+        }
     }
 }
 
