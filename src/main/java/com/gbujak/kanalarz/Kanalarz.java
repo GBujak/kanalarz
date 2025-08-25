@@ -65,16 +65,14 @@ public class Kanalarz {
         if (context == null) {
             try {
                 return method.invoke(target, arguments);
-            } catch (Throwable error) {
+            } catch (InvocationTargetException error) {
                 if (step.fallible()) {
-                    return StepOut.err(error);
+                    return StepOut.err(error.getTargetException());
                 } else {
-                    if (error instanceof RuntimeException re) {
-                        throw re;
-                    } else {
-                        throw new RuntimeException(error);
-                    }
+                    throw new KanalarzException.KanalarzStepFailedException(error.getTargetException());
                 }
+            } catch (Throwable e) {
+                throw new KanalarzException.KanalarzInternalError(e.getMessage(), e);
             }
         }
 
