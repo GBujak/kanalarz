@@ -49,9 +49,15 @@ internal open class TestStepsKotlin {
         return testNameService.set(newName)
     }
 
-    @Rollback(forStep = "set-name", fallible = true)
-    open fun setNameRollback(@RollforwardOut out: String?) {
-        testNameService.set(out)
+    @Rollback(forStep = "set-name")
+    open fun setNameRollback(
+        newName: String?,
+        @RollforwardOut originalName: String?,
+    ) {
+        if (testNameService.name() != newName) {
+            throw RuntimeException("Name is no longer $newName, it's now ${testNameService.name()}")
+        }
+        testNameService.set(originalName)
     }
 }
 

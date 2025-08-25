@@ -54,9 +54,17 @@ class TestSteps {
         return Optional.ofNullable(testNameService.set(newName));
     }
 
-    @Rollback(forStep = "set-name", fallible = true)
-    public void setNameRollback(@NonNull @RollforwardOut Optional<String> test) {
-        testNameService.set(test.orElse(null));
+    @Rollback(forStep = "set-name")
+    public void setNameRollback(
+        String newName,
+        @NonNull @RollforwardOut Optional<String> originalName
+    ) {
+        if (!Objects.equals(newName, testNameService.name())) {
+            throw new RuntimeException(
+                "Name changed, it's no longer " + newName + ", it's now " + testNameService.name()
+            );
+        }
+        testNameService.set(originalName.orElse(null));
     }
 }
 
