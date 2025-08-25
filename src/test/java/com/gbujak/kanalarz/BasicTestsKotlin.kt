@@ -10,16 +10,13 @@ import com.gbujak.kanalarz.annotations.StepsHolder
 import org.assertj.core.api.AssertionsForClassTypes
 import org.assertj.core.api.AssertionsForClassTypes.assertThat
 import org.assertj.core.api.AssertionsForInterfaceTypes
-import org.assertj.core.api.ThrowableAssert.ThrowingCallable
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.lang.NonNull
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import java.util.*
-import java.util.function.Function
 
 @Service
 internal class TestNameServiceKotlin {
@@ -85,7 +82,7 @@ class BasicTestsKotlin {
     @Test
     fun basicRollforward() {
         assertThat(testNameService.name()).isNull()
-        kanalarz.newContext().run {
+        kanalarz.newContext().start {
             assertThat(testSteps.setName("test")).isNull()
         }
         assertThat(testNameService.name()).isEqualTo("test")
@@ -100,7 +97,7 @@ class BasicTestsKotlin {
         assertThat(testNameService.name()).isEqualTo(null)
 
         AssertionsForClassTypes.assertThatThrownBy {
-            kanalarz.newContext().resumes(contextId).run {
+            kanalarz.newContext().resumes(contextId).start {
                 testSteps.setName(testNewName)
                 assertThat(testNameService.name()).isEqualTo(testNewName)
                 throw exception
@@ -125,7 +122,7 @@ class BasicTestsKotlin {
         assertThat(testNameService.name()).isNull()
 
         AssertionsForClassTypes.assertThatThrownBy {
-            kanalarz.newContext().resumes(contextId).run {
+            kanalarz.newContext().resumes(contextId).start {
                 testSteps.setName(testNewName)
                 assertThat(testNameService.name()).isEqualTo(testNewName)
                 testSteps.setName(testNewName)
@@ -150,13 +147,13 @@ class BasicTestsKotlin {
 
         assertThat(testNameService.name()).isNull()
 
-        kanalarz.newContext().resumes(contextId).run {
+        kanalarz.newContext().resumes(contextId).start {
             testSteps.setName(testNewName)
             testSteps.setName(testNewName2)
         }
 
         AssertionsForClassTypes.assertThatThrownBy {
-            kanalarz.newContext().resumes(contextId).run {
+            kanalarz.newContext().resumes(contextId).start {
                 testSteps.setName(testNewName)
                 testSteps.setName(testNewName2)
                 testSteps.setName(testNewName2)

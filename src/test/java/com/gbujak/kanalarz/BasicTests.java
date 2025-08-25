@@ -81,7 +81,7 @@ public class BasicTests {
     @Test
     void basicRollforward() {
         assertThat(testNameService.name()).isNull();
-        kanalarz.newContext().<Void>run(ctx -> {
+        kanalarz.newContext().<Void>start(ctx -> {
             assertThat(testSteps.setName("test")).isEqualTo(Optional.empty());
             return null;
         });
@@ -97,7 +97,7 @@ public class BasicTests {
         assertThat(testNameService.name()).isEqualTo(null);
 
         assertThatThrownBy(() ->
-            kanalarz.newContext().resumes(contextId).run(ctx -> {
+            kanalarz.newContext().resumes(contextId).start(ctx -> {
                 testSteps.setName(testNewName);
                 assertThat(testNameService.name()).isEqualTo(testNewName);
                 throw exception;
@@ -118,7 +118,7 @@ public class BasicTests {
         assertThat(testNameService.name()).isNull();
 
         assertThatThrownBy(() ->
-            kanalarz.newContext().resumes(contextId).run(ctx -> {
+            kanalarz.newContext().resumes(contextId).start(ctx -> {
                 testSteps.setName(testNewName);
                 assertThat(testNameService.name()).isEqualTo(testNewName);
                 testSteps.setName(testNewName);
@@ -140,14 +140,14 @@ public class BasicTests {
 
         assertThat(testNameService.name()).isNull();
 
-        kanalarz.newContext().resumes(contextId).run(ctx -> {
+        kanalarz.newContext().resumes(contextId).start(ctx -> {
             testSteps.setName(testNewName);
             testSteps.setName(testNewName2);
             return null;
         });
 
         assertThatThrownBy(() ->
-            kanalarz.newContext().resumes(contextId).run(ctx -> {
+            kanalarz.newContext().resumes(contextId).start(ctx -> {
                 testSteps.setName(testNewName);
                 testSteps.setName(testNewName2);
                 testSteps.setName(testNewName2);

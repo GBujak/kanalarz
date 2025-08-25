@@ -12,7 +12,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class Kanalarz {
@@ -382,7 +381,7 @@ public class Kanalarz {
             return this;
         }
 
-        public <T> T run(Function<KanalarzContext, T> block) {
+        public <T> T start(Function<KanalarzContext, T> block) {
             return inContext(metadata, resumeContext, block);
         }
     }
