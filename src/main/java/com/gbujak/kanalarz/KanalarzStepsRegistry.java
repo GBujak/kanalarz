@@ -11,8 +11,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.gbujak.kanalarz.Utils.isStepOut;
-
 class KanalarzStepsRegistry {
 
     private final Map<String, StepInfoClasses.StepInfo> steps = new HashMap<>();
@@ -31,7 +29,7 @@ class KanalarzStepsRegistry {
             throw new RuntimeException("Duplicated step identifier %s".formatted(stepIdentifier));
         }
         var stepInfo = StepInfoClasses.StepInfo.createNew(target, method, stepsHolder, step, returnIsSecret);
-        if (step.fallible() && !isStepOut(stepInfo.returnType)) {
+        if (step.fallible() && !StepOut.isTypeStepOut(stepInfo.returnType)) {
             throw new RuntimeException(
                 "Fallible steps must return a [%s] instance so the error can be wrapped and returned."
                     .formatted(StepOut.class.getCanonicalName())
@@ -72,10 +70,7 @@ class KanalarzStepsRegistry {
 
         for (var param : stepInfo.paramsInfo) {
             if (param.isRollforwardOutput) {
-                var expectedType =
-                    Utils.isStepOut(rollforwardStep.returnType)
-                        ? Utils.getTypeFromStepOut(rollforwardStep.returnType)
-                        : rollforwardStep.returnType;
+                var expectedType = StepOut.unwrapStepOutType(rollforwardStep.returnType);
                 if (!param.type.equals(expectedType)) {
                     throw new RuntimeException(
                         ("Rollback step [%s] declares a rollforward step [%s] output parameter [%s] but the return " +

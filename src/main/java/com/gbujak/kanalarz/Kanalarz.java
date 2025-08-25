@@ -8,6 +8,7 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -110,7 +111,7 @@ public class Kanalarz {
         ));
 
         if (!cancellableContexts.contains(context.getId())) {
-            throw new RuntimeException("Context was cancelled");
+            throw new KanalarzException.KanalarzContextCancelledException();
         }
 
         var stepInfo = stepsRegistry.getStepInfo(stepsHolder, step);
@@ -123,9 +124,10 @@ public class Kanalarz {
         try {
             result = method.invoke(target, arguments);
             if (step.fallible() && result == null) {
-                throw new RuntimeException(
+                throw new KanalarzException.KanalarzInternalError(
                     "Fallible step [%s] returned null instead of a StepOut instance!"
-                        .formatted(KanalarzStepsRegistry.stepIdentifier(stepsHolder, step))
+                        .formatted(KanalarzStepsRegistry.stepIdentifier(stepsHolder, step)),
+                    null
                 );
             }
             if (result instanceof StepOut<?> stepOutResult) {
@@ -142,8 +144,8 @@ public class Kanalarz {
                     stepInfo.returnIsSecret
                 )
             );
-        } catch (Throwable e) {
-            error = e;
+        } catch (InvocationTargetException e) {
+            error = e.getTargetException();
             resultSerialized = serialization.serializeStepExecution(
                 serializeParametersInfo,
                 new KanalarzSerialization.SerializeReturnInfo(
@@ -152,6 +154,11 @@ public class Kanalarz {
                     error,
                     stepInfo.returnIsSecret
                 )
+            );
+        } catch (Throwable e) {
+            throw new KanalarzException.KanalarzInternalError(
+                "Error calling step [%s]".formatted(KanalarzStepsRegistry.stepIdentifier(stepsHolder, step)),
+                e
             );
         }
 
@@ -169,11 +176,7 @@ public class Kanalarz {
             if (step.fallible()) {
                 return StepOut.err(error);
             } else {
-                if (error instanceof RuntimeException re) {
-                    throw re;
-                } else {
-                    throw new RuntimeException(error);
-                }
+                throw new KanalarzException.KanalarzStepFailedException(error);
             }
         } else {
             return unwrappedStepOut
@@ -211,7 +214,7 @@ public class Kanalarz {
     public <T> T inContext(Map<String, String> metadata, Function<KanalarzContext, T> body) {
         KanalarzContext previous = kanalarzContextThreadLocal.get();
         if (previous != null) {
-            throw new IllegalStateException(
+            throw new KanalarzException.KanalarzIllegalUsageException(
                 "Nested kanalarz context [" + previous.getId() + "] with metadata " + previous.fullMetadata()
             );
         }
@@ -227,9 +230,14 @@ public class Kanalarz {
             activeContexts.incrementAndGet();
             cancellableContexts.add(newContextId);
             result = body.apply(context);
-        } catch (Throwable e) {
-            performRollback(Objects.requireNonNull(newContextId));
+        } catch (KanalarzException.KanalarzInternalError e) {
             throw e;
+        } catch (KanalarzException.KanalarzStepFailedException e) {
+            performRollback(Objects.requireNonNull(newContextId), e.getInitialStepFailedException());
+            throw e;
+        } catch (Throwable e) {
+            performRollback(Objects.requireNonNull(newContextId), e);
+            throw new KanalarzException.KanalarzThrownOutsideOfStepException(e);
         } finally {
             kanalarzContextThreadLocal.remove();
             activeContexts.decrementAndGet();
@@ -241,7 +249,7 @@ public class Kanalarz {
         return result;
     }
 
-    private void performRollback(@NonNull UUID contextId) {
+    private void performRollback(@NonNull UUID contextId, Throwable originalError) {
         var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(contextId);
         for (var rollforward : executedSteps.reversed()) {
             if (rollforward.failed()) {
@@ -258,16 +266,17 @@ public class Kanalarz {
             }
 
             if (rollback.rollback == null) {
-                throw new RuntimeException(
-                    "Library logic error: Step [%s] is rollback but had no rollback info"
-                        .formatted(rollback)
+                throw new KanalarzException.KanalarzInternalError(
+                    "Step [%s] is rollback but had no rollback info"
+                        .formatted(rollback),
+                    null
                 );
             }
 
             var deserializedParams = serialization.deserializeParameters(
                 rollforward.serializedExecutionResult(),
                 makeDeserializeParamsInfo(stepInfo.paramsInfo),
-                stepInfo.returnType
+                StepOut.unwrapStepOutType(stepInfo.returnType)
             );
             if (deserializedParams.executionError() != null) {
                 continue;
@@ -287,7 +296,7 @@ public class Kanalarz {
                 }
 
                 if (paramInfo.isNonNullable && parameters[i] == null) {
-                    throw new RuntimeException(
+                    throw new KanalarzException.KanalarzIllegalUsageException(
                         "Trying to execute rollback for step [%s] but the non-nullable parameter [%s] is null"
                             .formatted(rollforward.stepIdentifier(), paramInfo.paramName)
                     );
@@ -309,8 +318,10 @@ public class Kanalarz {
                 Throwable error = null;
                 try {
                     result = rollback.method.invoke(rollback.target, parameters);
+                } catch (InvocationTargetException e) {
+                    error = e.getTargetException();
                 } catch (Throwable e) {
-                    error = e;
+                    throw new KanalarzException.KanalarzInternalError(e.getMessage(), e);
                 }
 
                 var serializedResult = serialization.serializeStepExecution(
@@ -334,11 +345,7 @@ public class Kanalarz {
                 ));
 
                 if (failed && !rollback.rollback.fallible()) {
-                    if (error instanceof RuntimeException re) {
-                        throw re;
-                    } else {
-                        throw new RuntimeException(error);
-                    }
+                    throw new KanalarzException.KanalarzRollbackStepFailedException(error, originalError);
                 }
 
                 return null;

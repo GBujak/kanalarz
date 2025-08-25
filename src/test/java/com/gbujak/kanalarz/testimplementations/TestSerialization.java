@@ -1,10 +1,10 @@
-package com.gbujak.kanalarz;
+package com.gbujak.kanalarz.testimplementations;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import jakarta.annotation.PostConstruct;
+import com.gbujak.kanalarz.KanalarzSerialization;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Component;
 
@@ -66,17 +66,13 @@ public class TestSerialization implements KanalarzSerialization {
         try {
             result = mapper.readValue(
                 tree.get("returnInfo").get("value").toString(),
-                mapper.getTypeFactory().constructType(Utils.getTypeFromStepOut(returnType))
+                mapper.getTypeFactory().constructType(returnType)
             );
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
 
         var error = tree.get("returnInfo").get("error").textValue();
-
-        if (Utils.isStepOut(returnType)) {
-            result = error != null ? StepOut.err(new RuntimeException(error)) : StepOut.of(result);
-        }
 
         var treeParams = tree.get("params");
         paramLoop: for (var param : parametersInfo) {

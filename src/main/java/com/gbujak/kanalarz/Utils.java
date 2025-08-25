@@ -188,36 +188,4 @@ class Utils {
         }
         return false;
     }
-
-    static boolean isStepOut(Type type) {
-        if (type instanceof ParameterizedType pt) {
-            return pt.getRawType().equals(StepOut.class);
-        } else if (type instanceof Class<?> clazz) {
-            return clazz.equals(StepOut.class);
-        }
-        return false;
-    }
-
-    @NonNull
-    static Type getTypeFromStepOut(Type stepOutType) {
-        if (stepOutType instanceof ParameterizedType pt) {
-            var arguments = pt.getActualTypeArguments();
-            if (arguments.length != 1) {
-                throw new RuntimeException(
-                    "Given type [%s] has zero or more than one type parameters, can't determine type parameter"
-                        .formatted(pt.getTypeName())
-                );
-            }
-            return arguments[0];
-        } else if (stepOutType instanceof Class<?> clazz && clazz.equals(StepOut.class)) {
-            throw new RuntimeException(
-                "Given type [%s] is a Class, not a parameterized type. Can't get the type parameter"
-                    .formatted(stepOutType.getTypeName())
-            );
-        } else {
-            throw new RuntimeException(
-                "Given type [%s] is not a StepOut type reference".formatted(stepOutType.getTypeName())
-            );
-        }
-    }
 }

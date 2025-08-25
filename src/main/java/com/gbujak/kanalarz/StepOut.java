@@ -3,6 +3,8 @@ package com.gbujak.kanalarz;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -95,6 +97,40 @@ public class StepOut<T> {
 
     public boolean isErr() {
         return this.value == null;
+    }
+
+    public static boolean isTypeStepOut(Type type) {
+        if (type instanceof ParameterizedType pt) {
+            return pt.getRawType().equals(StepOut.class);
+        } else if (type instanceof Class<?> clazz) {
+            return clazz.equals(StepOut.class);
+        }
+        return false;
+    }
+
+    /**
+     * Get type wrapped in StepOut or the parameter back if the parameter is not a StepOut
+     * @throws IllegalArgumentException if stepOutType is a Class reference and type parameters were erased
+     */
+    @NonNull
+    public static Type unwrapStepOutType(Type stepOutType) {
+        if (stepOutType instanceof ParameterizedType pt) {
+            var arguments = pt.getActualTypeArguments();
+            if (arguments.length != 1) {
+                throw new RuntimeException(
+                    "Given type [%s] has zero or more than one type parameters, can't determine type parameter"
+                        .formatted(pt.getTypeName())
+                );
+            }
+            return arguments[0];
+        } else if (stepOutType instanceof Class<?> clazz && clazz.equals(StepOut.class)) {
+            throw new IllegalArgumentException(
+                "Given type [%s] is a Class, not a parameterized type. Can't get the type parameter"
+                    .formatted(stepOutType.getTypeName())
+            );
+        } else {
+            return stepOutType;
+        }
     }
 
     @Override
