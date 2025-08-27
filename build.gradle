@@ -30,4 +30,7 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+    beforeTest { descriptor ->
+        logger.lifecycle("${descriptor}")
+    }
 }
