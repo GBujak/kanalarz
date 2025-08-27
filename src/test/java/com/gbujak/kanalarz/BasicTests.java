@@ -1,9 +1,6 @@
 package com.gbujak.kanalarz;
 
-import com.gbujak.kanalarz.annotations.Rollback;
-import com.gbujak.kanalarz.annotations.RollforwardOut;
-import com.gbujak.kanalarz.annotations.Step;
-import com.gbujak.kanalarz.annotations.StepsHolder;
+import com.gbujak.kanalarz.annotations.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,6 +63,23 @@ class TestSteps {
         }
         testNameService.set(originalName.orElse(null));
     }
+
+    @NonNull
+    @Step(identifier = "set-name-fallible", fallible = true)
+    public StepOut<Optional<String>> setNameFallible(String name) {
+        return StepOut.ofNullable(testNameService.set(name));
+    }
+
+    @Rollback(forStep = "set-name-fallible", fallible = true)
+    public void setNameFallibleRollback(
+        @NonNull @RollforwardOut Optional<String> oldName,
+        @Arg("name") String newName
+    ) {
+        if (!Objects.equals(testNameService.name(), newName)) {
+            throw new RuntimeException("Name is no longer " + newName);
+        }
+        testNameService.set(oldName.orElse(null));
+    }
 }
 
 @SpringBootTest
@@ -84,6 +98,7 @@ public class BasicTests {
     @Test
     void stepOutsideOfContext() {
         assertThat(testSteps.setName("test")).isEqualTo(Optional.empty());
+        assertThat(testNameService.name()).isEqualTo("test");
     }
 
     @Test
@@ -167,5 +182,78 @@ public class BasicTests {
 
         assertThat(testNameService.name()).isNull();
         assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId)).hasSize(9);
+    }
+
+    @Test
+    void basicFallibleStepTest() {
+        var contextId = UUID.randomUUID();
+        var testNewName = "test";
+
+        assertThat(testNameService.name()).isNull();
+
+        kanalarz.newContext().resumes(contextId).start(ctx -> {
+            testSteps.setNameFallible(testNewName);
+            testSteps.setNameFallible(testNewName);
+            return null;
+        });
+
+        assertThat(testNameService.name()).isEqualTo(testNewName);
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            .hasSize(2);
+    }
+
+    @Test
+    void basicNonFallibleRollbackStepTest() {
+        var contextId = UUID.randomUUID();
+        var testNewName = "test";
+        var testNewName2 = "abc";
+        var exception = new RuntimeException("test");
+
+        assertThatThrownBy(() ->
+            kanalarz.newContext().resumes(contextId).start(ctx -> {
+                testSteps.setName(testNewName);
+                testNameService.set(testNewName2);
+                throw exception;
+            })
+        )
+            .isExactlyInstanceOf(KanalarzException.KanalarzRollbackStepFailedException.class)
+            .matches((Throwable e) -> {
+                if (e instanceof KanalarzException.KanalarzRollbackStepFailedException rfe) {
+                    var rollbackFailedMessage = rfe.getRollbackStepFailedException().getMessage();
+                    var rollbackStepFailedMessageOk =
+                        rollbackFailedMessage.contains("Name changed") &&
+                            rollbackFailedMessage.contains(testNewName) &&
+                            rollbackFailedMessage.contains(testNewName2);
+                    return rollbackStepFailedMessageOk &&
+                        rfe.getInitialStepFailedException().equals(exception);
+                }
+                return false;
+            });
+
+        assertThat(testNameService.name()).isEqualTo(testNewName2);
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            .hasSize(2);
+    }
+
+    @Test
+    void basicFallibleRollbackStepTest() {
+        var contextId = UUID.randomUUID();
+        var testNewName = "test";
+        var testNewName2 = "abc";
+        var exception = new RuntimeException("test");
+
+        assertThatThrownBy(() ->
+            kanalarz.newContext().resumes(contextId).start(ctx -> {
+                testSteps.setNameFallible(testNewName);
+                testNameService.set(testNewName2);
+                throw exception;
+            })
+        )
+            .isExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
+            .hasCause(exception);
+
+        assertThat(testNameService.name()).isEqualTo(testNewName2);
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            .hasSize(2);
     }
 }

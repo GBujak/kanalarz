@@ -344,7 +344,7 @@ public class Kanalarz {
                 ));
 
                 if (failed && !rollback.rollback.fallible()) {
-                    throw new KanalarzException.KanalarzRollbackStepFailedException(error, originalError);
+                    throw new KanalarzException.KanalarzRollbackStepFailedException(originalError, error);
                 }
 
                 return null;

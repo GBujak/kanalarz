@@ -1,17 +1,15 @@
 package com.gbujak.kanalarz
 
-import com.gbujak.kanalarz.KanalarzException.KanalarzStepFailedException
-import com.gbujak.kanalarz.KanalarzException.KanalarzThrownOutsideOfStepException
-import com.gbujak.kanalarz.annotations.Rollback
-import com.gbujak.kanalarz.annotations.RollforwardOut
-import com.gbujak.kanalarz.annotations.Step
-import com.gbujak.kanalarz.annotations.StepsHolder
+import com.gbujak.kanalarz.KanalarzException.*
+import com.gbujak.kanalarz.annotations.*
+import org.assertj.core.api.AssertionsForClassTypes
 import org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy
 import org.assertj.core.api.AssertionsForInterfaceTypes.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.lang.NonNull
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import java.util.*
@@ -59,6 +57,23 @@ internal open class TestStepsKotlin {
         }
         testNameService.set(originalName)
     }
+
+    @NonNull
+    @Step(identifier = "set-name-fallible", fallible = true)
+    open fun setNameFallible(name: String?): StepOut<Optional<String>> {
+        return StepOut.ofNullable(testNameService.set(name))
+    }
+
+    @Rollback(forStep = "set-name-fallible", fallible = true)
+    open fun setNameFallibleRollback(
+        @NonNull @RollforwardOut oldName: Optional<String>,
+        @Arg("name") newName: String?
+    ) {
+        if (testNameService.name() != newName) {
+            throw java.lang.RuntimeException("Name is no longer " + newName)
+        }
+        testNameService.set(oldName.orElse(null))
+    }
 }
 
 @SpringBootTest
@@ -84,6 +99,7 @@ class BasicTestsKotlin {
     @Test
     fun stepOutsideOfContext() {
         assertThat(testSteps.setName("test")).isNull()
+        assertThat(testNameService.name()).isEqualTo("test")
     }
 
     @Test
@@ -166,5 +182,76 @@ class BasicTestsKotlin {
         assertThat(testNameService.name()).isNull()
         assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
             .hasSize(9)
+    }
+
+    @Test
+    fun basicFallibleStepTest() {
+        val contextId = UUID.randomUUID()
+        val testNewName = "test"
+
+        AssertionsForClassTypes.assertThat(testNameService.name()).isNull()
+
+        kanalarz.newContext().resumes(contextId).start {
+            testSteps.setNameFallible(testNewName)
+            testSteps.setNameFallible(testNewName)
+            null
+        }
+
+        assertThat(testNameService.name()).isEqualTo(testNewName)
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            .hasSize(2)
+    }
+
+    @Test
+    fun basicNonFallibleRollbackStepTest() {
+        val contextId = UUID.randomUUID()
+        val testNewName = "test"
+        val testNewName2 = "abc"
+        val exception = RuntimeException("test")
+
+        assertThatThrownBy {
+            kanalarz.newContext().resumes(contextId).start {
+                testSteps.setName(testNewName)
+                testNameService.set(testNewName2)
+                throw exception
+            }
+        }
+            .isExactlyInstanceOf(KanalarzRollbackStepFailedException::class.java)
+            .matches { e ->
+                if (e !is KanalarzRollbackStepFailedException) return@matches false
+                val rollbackFailedMessage = e.rollbackStepFailedException.message.orEmpty()
+                val rollbackStepFailedMessageOk =
+                    rollbackFailedMessage.contains("Name is no longer") &&
+                        rollbackFailedMessage.contains(testNewName) &&
+                        rollbackFailedMessage.contains(testNewName2)
+                rollbackStepFailedMessageOk &&
+                    e.initialStepFailedException == exception
+            }
+
+        assertThat(testNameService.name()).isEqualTo(testNewName2)
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            .hasSize(2)
+    }
+
+    @Test
+    fun basicFallibleRollbackStepTest() {
+        val contextId = UUID.randomUUID()
+        val testNewName = "test"
+        val testNewName2 = "abc"
+        val exception = java.lang.RuntimeException("test")
+
+        assertThatThrownBy {
+            kanalarz.newContext().resumes(contextId).start {
+                testSteps.setNameFallible(testNewName)
+                testNameService.set(testNewName2)
+                throw exception
+            }
+        }
+            .isExactlyInstanceOf(KanalarzThrownOutsideOfStepException::class.java)
+            .hasCause(exception)
+
+        assertThat(testNameService.name()).isEqualTo(testNewName2)
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            .hasSize(2)
     }
 }
