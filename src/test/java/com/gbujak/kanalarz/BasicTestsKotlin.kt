@@ -70,7 +70,7 @@ internal open class TestStepsKotlin {
         @Arg("name") newName: String?
     ) {
         if (testNameService.name() != newName) {
-            throw java.lang.RuntimeException("Name is no longer " + newName)
+            throw RuntimeException("Name is no longer " + newName)
         }
         testNameService.set(oldName.orElse(null))
     }
@@ -238,7 +238,7 @@ class BasicTestsKotlin {
         val contextId = UUID.randomUUID()
         val testNewName = "test"
         val testNewName2 = "abc"
-        val exception = java.lang.RuntimeException("test")
+        val exception = RuntimeException("test")
 
         assertThatThrownBy {
             kanalarz.newContext().resumes(contextId).start {
