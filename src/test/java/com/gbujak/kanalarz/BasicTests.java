@@ -104,10 +104,9 @@ public class BasicTests {
     @Test
     void basicRollforward() {
         assertThat(testNameService.name()).isNull();
-        kanalarz.newContext().<Void>start(ctx -> {
-            assertThat(testSteps.setName("test")).isEqualTo(Optional.empty());
-            return null;
-        });
+        kanalarz.newContext().consume(ctx ->
+            assertThat(testSteps.setName("test")).isEqualTo(Optional.empty())
+        );
         assertThat(testNameService.name()).isEqualTo("test");
     }
 
@@ -120,7 +119,7 @@ public class BasicTests {
         assertThat(testNameService.name()).isEqualTo(null);
 
         assertThatThrownBy(() ->
-            kanalarz.newContext().resumes(contextId).start(ctx -> {
+            kanalarz.newContext().resumes(contextId).consume(ctx -> {
                 testSteps.setName(testNewName);
                 assertThat(testNameService.name()).isEqualTo(testNewName);
                 throw exception;
@@ -141,11 +140,10 @@ public class BasicTests {
         assertThat(testNameService.name()).isNull();
 
         assertThatThrownBy(() ->
-            kanalarz.newContext().resumes(contextId).start(ctx -> {
+            kanalarz.newContext().resumes(contextId).consume(ctx -> {
                 testSteps.setName(testNewName);
                 assertThat(testNameService.name()).isEqualTo(testNewName);
                 testSteps.setName(testNewName);
-                return null;
             })
         )
             .isExactlyInstanceOf(KanalarzException.KanalarzStepFailedException.class)
@@ -163,18 +161,16 @@ public class BasicTests {
 
         assertThat(testNameService.name()).isNull();
 
-        kanalarz.newContext().resumes(contextId).start(ctx -> {
+        kanalarz.newContext().resumes(contextId).consume(ctx -> {
             testSteps.setName(testNewName);
             testSteps.setName(testNewName2);
-            return null;
         });
 
         assertThatThrownBy(() ->
-            kanalarz.newContext().resumes(contextId).start(ctx -> {
+            kanalarz.newContext().resumes(contextId).consume(ctx -> {
                 testSteps.setName(testNewName);
                 testSteps.setName(testNewName2);
                 testSteps.setName(testNewName2);
-                return null;
             })
         )
             .isExactlyInstanceOf(KanalarzException.KanalarzStepFailedException.class)
@@ -191,10 +187,9 @@ public class BasicTests {
 
         assertThat(testNameService.name()).isNull();
 
-        kanalarz.newContext().resumes(contextId).start(ctx -> {
+        kanalarz.newContext().resumes(contextId).consume(ctx -> {
             testSteps.setNameFallible(testNewName);
             testSteps.setNameFallible(testNewName);
-            return null;
         });
 
         assertThat(testNameService.name()).isEqualTo(testNewName);

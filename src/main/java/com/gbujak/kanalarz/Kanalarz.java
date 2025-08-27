@@ -11,7 +11,9 @@ import org.springframework.lang.Nullable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class Kanalarz {
@@ -302,7 +304,7 @@ public class Kanalarz {
                 }
             }
 
-            contextOrThrow().<Void>withStepId(stepId -> {
+            contextOrThrow().withStepId(stepId -> {
 
                 persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
                     contextId,
@@ -381,6 +383,13 @@ public class Kanalarz {
 
         public <T> T start(Function<KanalarzContext, T> block) {
             return inContext(metadata, resumeContext, block);
+        }
+
+        public void consume(Consumer<KanalarzContext> block) {
+            start(ctx -> {
+                block.accept(ctx);
+                return null;
+            });
         }
     }
 }

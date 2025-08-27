@@ -125,6 +125,18 @@ class KanalarzStepsRegistry {
                         )
                 );
             }
+
+            if (!correspondingParam.get().isNonNullable == param.isNonNullable) {
+                throw new RuntimeException(
+                    ("Rollback step [%s] declares a rollforward step [%s] parameter [%s] but the parameter " +
+                        "type of the rollforward step and that parameter have different nullability!")
+                        .formatted(
+                            rollbackIdentifier,
+                            stepIdentifier,
+                            param.paramName
+                        )
+                );
+            }
         }
 
         steps.put(rollbackIdentifier, stepInfo);
