@@ -1,9 +1,13 @@
 package com.gbujak.kanalarz
 
 import com.gbujak.kanalarz.KanalarzException.*
+import com.gbujak.kanalarz.KanalarzPersistence.StepExecutedInfo
+import com.gbujak.kanalarz.TestNameServiceKotlin.NameServiceNameAlreadyThatValueException
+import com.gbujak.kanalarz.TestStepsKotlin.RollbackStepNameNoLongerTheSameException
 import com.gbujak.kanalarz.annotations.*
 import org.assertj.core.api.AssertionsForClassTypes
 import org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy
+import org.assertj.core.api.AssertionsForInterfaceTypes
 import org.assertj.core.api.AssertionsForInterfaceTypes.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -17,11 +21,13 @@ import java.util.*
 @Service
 internal class TestNameServiceKotlin {
 
+    class NameServiceNameAlreadyThatValueException : RuntimeException()
+
     private var name: String? = null
 
     fun set(value: String?): String? {
         if (name == value) {
-            throw RuntimeException("Name already equals that")
+            throw NameServiceNameAlreadyThatValueException()
         }
         val tmp = name
         name = value
@@ -39,6 +45,8 @@ internal class TestNameServiceKotlin {
 @StepsHolder(identifier = "test-steps-kotlin")
 internal open class TestStepsKotlin {
 
+    class RollbackStepNameNoLongerTheSameException : RuntimeException()
+
     @Autowired
     private lateinit var testNameService: TestNameServiceKotlin
 
@@ -53,7 +61,7 @@ internal open class TestStepsKotlin {
         @RollforwardOut originalName: String?,
     ) {
         if (testNameService.name() != newName) {
-            throw RuntimeException("Name is no longer $newName, it's now ${testNameService.name()}")
+            throw RollbackStepNameNoLongerTheSameException()
         }
         testNameService.set(originalName)
     }
@@ -149,7 +157,7 @@ class BasicTestsKotlin {
             }
         }
             .isExactlyInstanceOf(KanalarzStepFailedException::class.java)
-            .hasCauseExactlyInstanceOf(RuntimeException::class.java)
+            .hasCauseExactlyInstanceOf(NameServiceNameAlreadyThatValueException::class.java)
 
         assertThat(testNameService.name()).isNull()
         assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
@@ -177,7 +185,7 @@ class BasicTestsKotlin {
             }
         }
             .isExactlyInstanceOf(KanalarzStepFailedException::class.java)
-            .hasCauseExactlyInstanceOf(RuntimeException::class.java)
+            .hasCauseExactlyInstanceOf(NameServiceNameAlreadyThatValueException::class.java)
 
         assertThat(testNameService.name()).isNull()
         assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
@@ -219,13 +227,9 @@ class BasicTestsKotlin {
             .isExactlyInstanceOf(KanalarzRollbackStepFailedException::class.java)
             .matches { e ->
                 if (e !is KanalarzRollbackStepFailedException) return@matches false
-                val rollbackFailedMessage = e.rollbackStepFailedException.message.orEmpty()
-                val rollbackStepFailedMessageOk =
-                    rollbackFailedMessage.contains("Name is no longer") &&
-                        rollbackFailedMessage.contains(testNewName) &&
-                        rollbackFailedMessage.contains(testNewName2)
-                rollbackStepFailedMessageOk &&
-                    e.initialStepFailedException == exception
+                e.initialStepFailedException == exception &&
+                    e.rollbackStepFailedException::class.java ==
+                        RollbackStepNameNoLongerTheSameException::class.java
             }
 
         assertThat(testNameService.name()).isEqualTo(testNewName2)
@@ -253,5 +257,46 @@ class BasicTestsKotlin {
         assertThat(testNameService.name()).isEqualTo(testNewName2)
         assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
             .hasSize(2)
+    }
+
+
+    @Test
+    fun basicDeferredRollbackTest() {
+        val contextId = UUID.randomUUID()
+        val testName1 = "test-name-1"
+        val testName2 = "test-name-2"
+
+        assertThat(testNameService.name()).isNull()
+
+        assertThatThrownBy {
+            kanalarz.newContext()
+                .resumes(contextId)
+                .option(Kanalarz.Option.DEFER_ROLLBACK)
+                .consume {
+                    testSteps.setName(testName1)
+                    testSteps.setName(testName2)
+                    testSteps.setName(testName2)
+                }
+        }
+            .isExactlyInstanceOf(KanalarzStepFailedException::class.java)
+            .hasCauseExactlyInstanceOf(NameServiceNameAlreadyThatValueException::class.java)
+
+        AssertionsForClassTypes.assertThat(testNameService.name()).isEqualTo(testName2)
+        AssertionsForInterfaceTypes.assertThat<StepExecutedInfo?>(
+            persistence.getExecutedStepsInContextInOrderOfExecution(
+                contextId
+            )
+        )
+            .hasSize(3)
+
+        kanalarz.newContext().resumes(contextId).rollbackNow()
+
+        AssertionsForClassTypes.assertThat(testNameService.name()).isNull()
+        AssertionsForInterfaceTypes.assertThat<StepExecutedInfo?>(
+            persistence.getExecutedStepsInContextInOrderOfExecution(
+                contextId
+            )
+        )
+            .hasSize(5)
     }
 }

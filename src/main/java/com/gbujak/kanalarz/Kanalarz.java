@@ -11,10 +11,10 @@ import org.springframework.lang.Nullable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class Kanalarz {
 
@@ -166,6 +166,7 @@ public class Kanalarz {
         persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
             context.getId(),
             stepId,
+            Optional.empty(),
             Collections.unmodifiableMap(context.fullMetadata()),
             KanalarzStepsRegistry.stepIdentifier(stepsHolder, step),
             resultSerialized,
@@ -215,7 +216,8 @@ public class Kanalarz {
     private <T> T inContext(
         @NonNull Map<String, String> metadata,
         @Nullable UUID resumesContext,
-        @NonNull Function<KanalarzContext, T> body
+        @NonNull Function<KanalarzContext, T> body,
+        @NonNull EnumSet<Option> options
     ) {
         KanalarzContext previous = kanalarzContextThreadLocal.get();
         if (previous != null) {
@@ -225,34 +227,51 @@ public class Kanalarz {
         }
 
         UUID newContextId = null;
-        try {
-            var context = new KanalarzContext(this, resumesContext);
-            newContextId = context.getId();
-            context.putAllMetadata(metadata);
-            kanalarzContextThreadLocal.set(context);
-            activeContexts.incrementAndGet();
-            cancellableContexts.add(newContextId);
-            return body.apply(context);
-        } catch (KanalarzException.KanalarzInternalError e) {
-            throw e;
-        } catch (KanalarzException.KanalarzStepFailedException e) {
-            performRollback(Objects.requireNonNull(newContextId), e.getInitialStepFailedException());
-            throw e;
-        } catch (Throwable e) {
-            performRollback(Objects.requireNonNull(newContextId), e);
-            throw new KanalarzException.KanalarzThrownOutsideOfStepException(e);
-        } finally {
-            kanalarzContextThreadLocal.remove();
-            activeContexts.decrementAndGet();
-            if (newContextId != null) {
-                cancellableContexts.remove(newContextId);
+        try (var autoCloseableContext = new AutoCloseableContext(metadata, resumesContext)) {
+            try {
+                newContextId = autoCloseableContext.context().getId();
+                return body.apply(autoCloseableContext.context());
+            } catch (KanalarzException.KanalarzInternalError e) {
+                throw e;
+            } catch (KanalarzException.KanalarzStepFailedException e) {
+                if (!options.contains(Option.DEFER_ROLLBACK)) {
+                    performRollback(Objects.requireNonNull(newContextId), e.getInitialStepFailedException(), options);
+                }
+                throw e;
+            } catch (Throwable e) {
+                performRollback(Objects.requireNonNull(newContextId), e, options);
+                throw new KanalarzException.KanalarzThrownOutsideOfStepException(e);
             }
         }
     }
 
-    private void performRollback(@NonNull UUID contextId, Throwable originalError) {
+    private void rollbackInContext(
+        @NonNull Map<String, String> metadata,
+        @Nullable UUID resumesContext,
+        @NonNull EnumSet<Option> options
+    ) {
+        try (var autoCloseableContext = new AutoCloseableContext(metadata, resumesContext)) {
+            performRollback(autoCloseableContext.context().getId(), null, options);
+        }
+    }
+
+    private void performRollback(@NonNull UUID contextId, Throwable originalError, EnumSet<Option> options) {
         var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(contextId);
-        for (var rollforward : executedSteps.reversed()) {
+        var executedRollbacks =
+            executedSteps.stream()
+                .filter(it -> it.wasRollbackFor().isPresent())
+                .collect(
+                    Collectors.toMap(
+                        it -> it.wasRollbackFor().get(),
+                        KanalarzPersistence.StepExecutedInfo::failed,
+                        (leftFailed, rightFailed) -> leftFailed && rightFailed
+                    ));
+        var stepsToRollback =
+            executedSteps.reversed().stream()
+                .filter(it -> it.wasRollbackFor().isEmpty())
+                .toList();
+
+        for (var rollforward : stepsToRollback) {
             if (rollforward.failed()) {
                 continue;
             }
@@ -273,6 +292,23 @@ public class Kanalarz {
                     null
                 );
             }
+
+            var executedRollbackFailed = executedRollbacks.get(rollforward.stepId());
+            if (executedRollbackFailed != null) {
+                if (!executedRollbackFailed || options.contains(Option.SKIP_FAILED_ROLLBACKS)) {
+                    continue;
+                }
+                if (!options.contains(Option.RETRY_FAILED_ROLLBACKS)) {
+                    throw new KanalarzException.KanalarzRollbackStepFailedException(
+                        originalError,
+                        new IllegalStateException(
+                            "Step already tried to rollback and failed. Use SKIP_FAILED_ROLLBACKS or " +
+                                "RETRY_FAILED_ROLLBACKS to proceed."
+                        )
+                    );
+                }
+            }
+
 
             var deserializedParams = serialization.deserializeParameters(
                 rollforward.serializedExecutionResult(),
@@ -305,7 +341,6 @@ public class Kanalarz {
             }
 
             contextOrThrow().withStepId(stepId -> {
-
                 persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
                     contextId,
                     stepId,
@@ -339,13 +374,14 @@ public class Kanalarz {
                 persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
                     contextId,
                     stepId,
-                    context().fullMetadata(),
+                    Optional.of(rollforward.stepId()),
+                    contextOrThrow().fullMetadata(),
                     KanalarzStepsRegistry.stepIdentifier(rollback.stepsHolder, rollback.rollback),
                     serializedResult,
                     failed
                 ));
 
-                if (failed && !rollback.rollback.fallible()) {
+                if (failed && !rollback.rollback.fallible() && !options.contains(Option.ALL_ROLLBACKS_FALLIBLE)) {
                     throw new KanalarzException.KanalarzRollbackStepFailedException(originalError, error);
                 }
 
@@ -363,15 +399,37 @@ public class Kanalarz {
 
     public class KanalarzContextBuilder {
 
-        @Nullable
-        private UUID resumeContext;
+        @Nullable private UUID resumeContext;
+        @NonNull private final Map<String, String> metadata = new HashMap<>();
+        private final EnumSet<Option> options = EnumSet.noneOf(Option.class);
 
         @NonNull
-        private final Map<String, String> metadata = new HashMap<>();
-
-        @NonNull
-        public KanalarzContextBuilder resumes(@NonNull UUID resumes) {
+        public KanalarzContextBuilder resumes(@Nullable UUID resumes) {
             this.resumeContext = resumes;
+            return this;
+        }
+
+        @NonNull
+        public KanalarzContextBuilder option(Option option) {
+            return option(option, true);
+        }
+
+        @NonNull
+        public KanalarzContextBuilder option(Option option, boolean enable) {
+            if (enable) {
+                var newOptions = EnumSet.copyOf(options);
+                options.add(option);
+                for (var incompatible : Option.incompatible) {
+                    if (newOptions.containsAll(incompatible)) {
+                        throw new IllegalStateException(
+                            "Incompatible option combination found in config: " + incompatible
+                        );
+                    }
+                }
+                options.add(option);
+            } else {
+                options.remove(option);
+            }
             return this;
         }
 
@@ -382,7 +440,7 @@ public class Kanalarz {
         }
 
         public <T> T start(Function<KanalarzContext, T> block) {
-            return inContext(metadata, resumeContext, block);
+            return inContext(metadata, resumeContext, block, options);
         }
 
         public void consume(Consumer<KanalarzContext> block) {
@@ -391,6 +449,56 @@ public class Kanalarz {
                 return null;
             });
         }
+
+        public void rollbackNow() {
+            if (resumeContext == null) {
+                throw new IllegalStateException(
+                    "Immediate rollback of a context that doesn't resume anything makes no sense!"
+                );
+            }
+            rollbackInContext(metadata, resumeContext, options);
+        }
+    }
+
+    private class AutoCloseableContext implements AutoCloseable {
+
+        private final KanalarzContext context;
+        private final UUID newContextId;
+
+        AutoCloseableContext(Map<String, String> metadata, UUID resumesContext) {
+            context = new KanalarzContext(Kanalarz.this, resumesContext);
+            newContextId = context.getId();
+            context.putAllMetadata(metadata);
+            kanalarzContextThreadLocal.set(context);
+            activeContexts.incrementAndGet();
+            cancellableContexts.add(newContextId);
+        }
+
+        @NonNull
+        public KanalarzContext context() {
+            return Objects.requireNonNull(context);
+        }
+
+        @Override
+        public void close() {
+            kanalarzContextThreadLocal.remove();
+            activeContexts.decrementAndGet();
+            if (newContextId != null) {
+                cancellableContexts.remove(newContextId);
+            }
+        }
+    }
+
+    public enum Option {
+        DEFER_ROLLBACK,
+        ALL_ROLLBACKS_FALLIBLE,
+        SKIP_FAILED_ROLLBACKS,
+        RETRY_FAILED_ROLLBACKS,
+        ;
+
+        private static final List<EnumSet<Option>> incompatible = List.of(
+            EnumSet.of(SKIP_FAILED_ROLLBACKS, RETRY_FAILED_ROLLBACKS)
+        );
     }
 }
 

@@ -22,6 +22,7 @@ public interface KanalarzPersistence {
     record StepCompletedEvent(
         @NonNull UUID contextId,
         @NonNull UUID stepId,
+        @NonNull Optional<UUID> stepIsRollbackFor,
         @NonNull Map<String, String> metadata,
         @NonNull String stepIdentifier,
         @NonNull String serializedExecutionResult,
@@ -33,6 +34,7 @@ public interface KanalarzPersistence {
         @NonNull UUID stepId,
         @NonNull String stepIdentifier,
         @NonNull String serializedExecutionResult,
+        @NonNull Optional<UUID> wasRollbackFor,
         boolean failed
     ) {}
     @NonNull

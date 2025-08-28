@@ -40,6 +40,7 @@ public class TestPersistence implements KanalarzPersistence {
                 it.stepId(),
                 it.stepIdentifier(),
                 it.serializedExecutionResult(),
+                it.stepIsRollbackFor(),
                 it.failed()
             ))
             .toList();

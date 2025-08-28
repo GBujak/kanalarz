@@ -19,11 +19,13 @@ import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 @Service
 class TestNameService {
 
+    public static class NameServiceNameAlreadyThatValueException extends RuntimeException {}
+
     private String name;
 
     public String set(String value) {
         if (Objects.equals(name, value)) {
-            throw new RuntimeException("Name already equals that");
+            throw new NameServiceNameAlreadyThatValueException();
         }
         var tmp = name;
         name = value;
@@ -43,6 +45,8 @@ class TestNameService {
 @StepsHolder(identifier = "test-steps")
 class TestSteps {
 
+    public static class RollbackStepNameNoLongerTheSameException extends RuntimeException {}
+
     @Autowired private TestNameService testNameService;
 
     @NonNull
@@ -57,9 +61,7 @@ class TestSteps {
         @NonNull @RollforwardOut Optional<String> originalName
     ) {
         if (!Objects.equals(newName, testNameService.name())) {
-            throw new RuntimeException(
-                "Name changed, it's no longer " + newName + ", it's now " + testNameService.name()
-            );
+            throw new RollbackStepNameNoLongerTheSameException();
         }
         testNameService.set(originalName.orElse(null));
     }
@@ -147,7 +149,7 @@ public class BasicTests {
             })
         )
             .isExactlyInstanceOf(KanalarzException.KanalarzStepFailedException.class)
-            .hasCauseExactlyInstanceOf(RuntimeException.class);
+            .hasCauseExactlyInstanceOf(TestNameService.NameServiceNameAlreadyThatValueException.class);
 
         assertThat(testNameService.name()).isNull();
         assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId)).hasSize(3);
@@ -174,7 +176,7 @@ public class BasicTests {
             })
         )
             .isExactlyInstanceOf(KanalarzException.KanalarzStepFailedException.class)
-            .hasCauseExactlyInstanceOf(RuntimeException.class);
+            .hasCauseExactlyInstanceOf(TestNameService.NameServiceNameAlreadyThatValueException.class);
 
         assertThat(testNameService.name()).isNull();
         assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId)).hasSize(9);
@@ -214,13 +216,10 @@ public class BasicTests {
             .isExactlyInstanceOf(KanalarzException.KanalarzRollbackStepFailedException.class)
             .matches((Throwable e) -> {
                 if (e instanceof KanalarzException.KanalarzRollbackStepFailedException rfe) {
-                    var rollbackFailedMessage = rfe.getRollbackStepFailedException().getMessage();
-                    var rollbackStepFailedMessageOk =
-                        rollbackFailedMessage.contains("Name changed") &&
-                            rollbackFailedMessage.contains(testNewName) &&
-                            rollbackFailedMessage.contains(testNewName2);
-                    return rollbackStepFailedMessageOk &&
-                        rfe.getInitialStepFailedException().equals(exception);
+                    return
+                        rfe.getInitialStepFailedException().equals(exception) &&
+                            rfe.getRollbackStepFailedException().getClass()
+                                .equals(TestSteps.RollbackStepNameNoLongerTheSameException.class);
                 }
                 return false;
             });
@@ -250,5 +249,37 @@ public class BasicTests {
         assertThat(testNameService.name()).isEqualTo(testNewName2);
         assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
             .hasSize(2);
+    }
+
+    @Test
+    void basicDeferredRollbackTest() {
+        var contextId = UUID.randomUUID();
+        var testName1 = "test-name-1";
+        var testName2 = "test-name-2";
+
+        assertThat(testNameService.name()).isNull();
+
+        assertThatThrownBy(() ->
+            kanalarz.newContext()
+                .resumes(contextId)
+                .option(Kanalarz.Option.DEFER_ROLLBACK)
+                .consume(ctx -> {
+                    testSteps.setName(testName1);
+                    testSteps.setName(testName2);
+                    testSteps.setName(testName2);
+                })
+        )
+            .isExactlyInstanceOf(KanalarzException.KanalarzStepFailedException.class)
+            .hasCauseExactlyInstanceOf(TestNameService.NameServiceNameAlreadyThatValueException.class);
+
+        assertThat(testNameService.name()).isEqualTo(testName2);
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            .hasSize(3);
+
+        kanalarz.newContext().resumes(contextId).rollbackNow();
+
+        assertThat(testNameService.name()).isNull();
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            .hasSize(5);
     }
 }
