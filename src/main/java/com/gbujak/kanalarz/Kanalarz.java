@@ -229,17 +229,16 @@ public class Kanalarz {
         UUID newContextId = null;
         try (var autoCloseableContext = new AutoCloseableContext(metadata, resumesContext)) {
             try {
-                newContextId = autoCloseableContext.context().getId();
                 return body.apply(autoCloseableContext.context());
             } catch (KanalarzException.KanalarzInternalError e) {
                 throw e;
             } catch (KanalarzException.KanalarzStepFailedException e) {
                 if (!options.contains(Option.DEFER_ROLLBACK)) {
-                    performRollback(Objects.requireNonNull(newContextId), e.getInitialStepFailedException(), options);
+                    performRollback(autoCloseableContext.context(), e.getInitialStepFailedException(), options);
                 }
                 throw e;
             } catch (Throwable e) {
-                performRollback(Objects.requireNonNull(newContextId), e, options);
+                performRollback(autoCloseableContext.context(), e, options);
                 throw new KanalarzException.KanalarzThrownOutsideOfStepException(e);
             }
         }
@@ -251,12 +250,12 @@ public class Kanalarz {
         @NonNull EnumSet<Option> options
     ) {
         try (var autoCloseableContext = new AutoCloseableContext(metadata, resumesContext)) {
-            performRollback(autoCloseableContext.context().getId(), null, options);
+            performRollback(autoCloseableContext.context(), null, options);
         }
     }
 
-    private void performRollback(@NonNull UUID contextId, Throwable originalError, EnumSet<Option> options) {
-        var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(contextId);
+    private void performRollback(@NonNull KanalarzContext context, Throwable originalError, EnumSet<Option> options) {
+        var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(context.getId());
         var executedRollbacks =
             executedSteps.stream()
                 .filter(it -> it.wasRollbackFor().isPresent())
@@ -340,12 +339,12 @@ public class Kanalarz {
                 }
             }
 
-            contextOrThrow().withStepId(stepId -> {
+            context.withStepId(stepId -> {
                 persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
-                    contextId,
+                    context.getId(),
                     stepId,
                     Optional.of(rollforward.stepId()),
-                    contextOrThrow().fullMetadata(),
+                    context.fullMetadata(),
                     KanalarzStepsRegistry.stepIdentifier(rollback.stepsHolder, rollback.rollback),
                     rollback.rollback.fallible()
                 ));
@@ -372,10 +371,10 @@ public class Kanalarz {
 
                 boolean failed = error != null;
                 persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
-                    contextId,
+                    context.getId(),
                     stepId,
                     Optional.of(rollforward.stepId()),
-                    contextOrThrow().fullMetadata(),
+                    context.fullMetadata(),
                     KanalarzStepsRegistry.stepIdentifier(rollback.stepsHolder, rollback.rollback),
                     serializedResult,
                     failed
