@@ -144,7 +144,7 @@ class KanalarzStepsRegistry {
     }
 
     @NonNull
-    StepInfoClasses.StepInfo getStepInfo(StepsHolder stepsHolder, Step step) {
+    StepInfoClasses.StepInfo getStepInfoOrThrow(StepsHolder stepsHolder, Step step) {
         var identifier = stepIdentifier(stepsHolder, step);
         return getStepInfoOrThrow(identifier);
     }

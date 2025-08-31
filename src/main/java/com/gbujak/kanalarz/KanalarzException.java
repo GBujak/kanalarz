@@ -7,7 +7,10 @@ public sealed abstract class KanalarzException extends RuntimeException permits
     KanalarzException.KanalarzInternalError,
     KanalarzException.KanalarzContextCancelledException,
     KanalarzException.KanalarzIllegalUsageException,
-    KanalarzException.KanalarzSerializationException
+    KanalarzException.KanalarzSerializationException,
+    KanalarzException.KanalarzNewStepBeforeReplayEndedException,
+    KanalarzException.KanalarzNotAllStepsReplayedException,
+    KanalarzException.KanalarzStepsWereNotReplayedAndWillPartiallyRollbackException
 {
 
     private KanalarzException(String message, Throwable cause) {
@@ -56,14 +59,8 @@ public sealed abstract class KanalarzException extends RuntimeException permits
     }
 
     public final static class KanalarzInternalError extends KanalarzException {
-        private final Throwable initialStepFailedException;
         KanalarzInternalError(String message, Throwable cause) {
             super("Internal unexpected error in the library implementation: " + message, cause);
-            initialStepFailedException = cause;
-        }
-
-        public Throwable getInitialStepFailedException() {
-            return initialStepFailedException;
         }
     }
 
@@ -82,6 +79,27 @@ public sealed abstract class KanalarzException extends RuntimeException permits
     public final static class KanalarzSerializationException extends KanalarzException {
         KanalarzSerializationException(String message) {
             super("Serialization error: " + message, null);
+        }
+    }
+
+    public final static class KanalarzNewStepBeforeReplayEndedException extends KanalarzException {
+        KanalarzNewStepBeforeReplayEndedException(String message) {
+            super("New step started before replay ended: " + message, null);
+        }
+    }
+
+    public final static class KanalarzNotAllStepsReplayedException extends KanalarzException {
+        KanalarzNotAllStepsReplayedException(String message) {
+            super("Not all steps have been replayed: " + message, null);
+        }
+    }
+
+    public final static class KanalarzStepsWereNotReplayedAndWillPartiallyRollbackException extends KanalarzException {
+        KanalarzStepsWereNotReplayedAndWillPartiallyRollbackException() {
+            super(
+                "Some steps were not replayed and they will be rolled back " +
+                    "but the entire context will not be rolled back.", null
+            );
         }
     }
 }

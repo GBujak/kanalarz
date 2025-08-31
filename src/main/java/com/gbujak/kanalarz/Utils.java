@@ -5,12 +5,16 @@ import kotlin.jvm.internal.Reflection;
 import kotlin.reflect.KClass;
 import kotlin.reflect.KFunction;
 import kotlin.reflect.KParameter;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.lang.NonNull;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.util.ArrayList;
+import java.util.List;
 
 class Utils {
 
@@ -184,5 +188,34 @@ class Utils {
             log.warn("Error trying to determine if a kotlin return type is nullable", e);
         }
         return false;
+    }
+
+    @NonNull
+    static ArrayList<KanalarzSerialization.SerializeParameterInfo> makeSerializeParametersInfo(
+        Object[] arguments,
+        StepInfoClasses.StepInfo stepInfo
+    ) {
+        var serializeParametersInfo = new ArrayList<KanalarzSerialization.SerializeParameterInfo>(arguments.length);
+        for (int i = 0; i < arguments.length; i++) {
+            var arg = arguments[i];
+            var paramInfo = stepInfo.paramsInfo.get(i);
+            serializeParametersInfo.add(
+                new KanalarzSerialization.SerializeParameterInfo(
+                    paramInfo.paramName,
+                    paramInfo.type,
+                    arg,
+                    paramInfo.secret
+                )
+            );
+        }
+        return serializeParametersInfo;
+    }
+
+    @NonNull
+    static List<KanalarzSerialization.DeserializeParameterInfo>
+    makeDeserializeParamsInfo(List<StepInfoClasses.ParamInfo> paramsInfo) {
+        return paramsInfo.stream()
+            .map(it -> new KanalarzSerialization.DeserializeParameterInfo(it.paramName, it.type))
+            .toList();
     }
 }
