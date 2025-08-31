@@ -22,9 +22,9 @@ public interface KanalarzSerialization {
         boolean secret
     ) {}
     @NonNull
-    String serializeStepExecution(
+    String serializeStepCalled(
         @NonNull List<SerializeParameterInfo> parametersInfo,
-        @NonNull SerializeReturnInfo returnInfo
+        @Nullable SerializeReturnInfo returnInfo
     );
 
     record DeserializeParameterInfo(
@@ -42,4 +42,6 @@ public interface KanalarzSerialization {
         @NonNull List<DeserializeParameterInfo> parametersInfo,
         @NonNull Type returnType
     );
+
+    boolean parametersAreEqualIgnoringReturn(String left, String right);
 }

@@ -1,10 +1,8 @@
 package com.gbujak.kanalarz;
 
-import com.gbujak.kanalarz.StepInfoClasses.StepInfo;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.aopalliance.intercept.MethodInvocation;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
@@ -100,22 +98,43 @@ public class Kanalarz {
         UUID stepId,
         KanalarzContext context
     ) {
+        if (!cancellableContexts.contains(context.getId())) {
+            throw new KanalarzException.KanalarzContextCancelledException();
+        }
+
+        var stepInfo = stepsRegistry.getStepInfoOrThrow(stepsHolder, step);
+        var serializeParametersInfo = Utils.makeSerializeParametersInfo(arguments, stepInfo);
+        var stepIdentifier = KanalarzStepsRegistry.stepIdentifier(stepsHolder, step);
+
+        var stepReplayer = context.stepReplayer();
+        if (stepReplayer != null) {
+            var serializedParameters = serialization.serializeStepCalled(serializeParametersInfo, null);
+            var foundStep = stepReplayer.findNextStep(stepIdentifier, serializedParameters);
+
+            if (stepReplayer.isDone()) {
+                context.clearStepReplayer();
+            }
+
+            if (foundStep) {
+                return StepOut.isTypeStepOut(stepInfo.returnType)
+                    ? StepOut.of(stepReplayer.getNextStepReturnValue())
+                    : stepReplayer.getNextStepReturnValue();
+            } else if (!context.optionEnabled(Option.NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED)) {
+                throw new KanalarzException.KanalarzNewStepBeforeReplayEndedException(
+                    stepIdentifier + " was called with parameters it hadn't been called with before or " +
+                        "it hadn't been called before at all."
+                );
+            }
+        }
 
         persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
             context.getId(),
             stepId,
             Optional.empty(),
             context.fullMetadata(),
-            KanalarzStepsRegistry.stepIdentifier(stepsHolder, step),
+            stepIdentifier,
             step.fallible()
         ));
-
-        if (!cancellableContexts.contains(context.getId())) {
-            throw new KanalarzException.KanalarzContextCancelledException();
-        }
-
-        var stepInfo = stepsRegistry.getStepInfo(stepsHolder, step);
-        var serializeParametersInfo = makeSerializeParametersInfo(arguments, stepInfo);
 
         Object result = null;
         Throwable error = null;
@@ -124,10 +143,9 @@ public class Kanalarz {
         try {
             result = method.invoke(target, arguments);
             if (step.fallible() && result == null) {
-                throw new KanalarzException.KanalarzInternalError(
+                throw new KanalarzException.KanalarzIllegalUsageException(
                     "Fallible step [%s] returned null instead of a StepOut instance!"
-                        .formatted(KanalarzStepsRegistry.stepIdentifier(stepsHolder, step)),
-                    null
+                        .formatted(stepIdentifier)
                 );
             }
             if (result instanceof StepOut<?> stepOutResult) {
@@ -135,7 +153,7 @@ public class Kanalarz {
                 result = stepOutResult.valueOrNull();
                 error = stepOutResult.errorOrNull();
             }
-            resultSerialized = serialization.serializeStepExecution(
+            resultSerialized = serialization.serializeStepCalled(
                 serializeParametersInfo,
                 new KanalarzSerialization.SerializeReturnInfo(
                     stepInfo.returnType,
@@ -146,7 +164,7 @@ public class Kanalarz {
             );
         } catch (InvocationTargetException e) {
             error = e.getTargetException();
-            resultSerialized = serialization.serializeStepExecution(
+            resultSerialized = serialization.serializeStepCalled(
                 serializeParametersInfo,
                 new KanalarzSerialization.SerializeReturnInfo(
                     stepInfo.returnType,
@@ -157,7 +175,7 @@ public class Kanalarz {
             );
         } catch (Throwable e) {
             throw new KanalarzException.KanalarzInternalError(
-                "Error calling step [%s]".formatted(KanalarzStepsRegistry.stepIdentifier(stepsHolder, step)),
+                "Error calling step [%s]".formatted(stepIdentifier),
                 e
             );
         }
@@ -168,7 +186,7 @@ public class Kanalarz {
             stepId,
             Optional.empty(),
             Collections.unmodifiableMap(context.fullMetadata()),
-            KanalarzStepsRegistry.stepIdentifier(stepsHolder, step),
+            stepIdentifier,
             resultSerialized,
             failed
         ));
@@ -187,27 +205,6 @@ public class Kanalarz {
         }
     }
 
-    @NotNull
-    private static ArrayList<KanalarzSerialization.SerializeParameterInfo> makeSerializeParametersInfo(
-        Object[] arguments,
-        StepInfo stepInfo
-    ) {
-        var serializeParametersInfo = new ArrayList<KanalarzSerialization.SerializeParameterInfo>(arguments.length);
-        for (int i = 0; i < arguments.length; i++) {
-            var arg = arguments[i];
-            var paramInfo = stepInfo.paramsInfo.get(i);
-            serializeParametersInfo.add(
-                new KanalarzSerialization.SerializeParameterInfo(
-                    paramInfo.paramName,
-                    paramInfo.type,
-                    arg,
-                    paramInfo.secret
-                )
-            );
-        }
-        return serializeParametersInfo;
-    }
-
     @NonNull
     public KanalarzContextBuilder newContext() {
         return new KanalarzContextBuilder();
@@ -217,7 +214,8 @@ public class Kanalarz {
         @NonNull Map<String, String> metadata,
         @Nullable UUID resumesContext,
         @NonNull Function<KanalarzContext, T> body,
-        @NonNull EnumSet<Option> options
+        @NonNull EnumSet<Option> options,
+        boolean resumeReplay
     ) {
         KanalarzContext previous = kanalarzContextThreadLocal.get();
         if (previous != null) {
@@ -226,21 +224,65 @@ public class Kanalarz {
             );
         }
 
-        UUID newContextId = null;
-        try (var autoCloseableContext = new AutoCloseableContext(metadata, resumesContext)) {
+        var replayer = resumeReplay
+            ? createStepReplayer(resumesContext, options)
+            : null;
+
+        try (var autoCloseableContext = new AutoCloseableContext(metadata, resumesContext, options, replayer)) {
             try {
-                return body.apply(autoCloseableContext.context());
+                var result = body.apply(autoCloseableContext.context());
+                if (replayer != null) {
+                    var unreplayed = replayer.unreplayed();
+                    if (!unreplayed.isEmpty()) {
+                        performRollback(
+                            autoCloseableContext.context(),
+                            new KanalarzException.KanalarzStepsWereNotReplayedAndWillPartiallyRollbackException(),
+                            options,
+                            unreplayed.stream()
+                                .map(KanalarzPersistence.StepExecutedInfo::stepId)
+                                .collect(Collectors.toUnmodifiableSet())
+                        );
+                    }
+                }
+                return result;
             } catch (KanalarzException.KanalarzInternalError e) {
                 throw e;
             } catch (KanalarzException.KanalarzStepFailedException e) {
                 if (!options.contains(Option.DEFER_ROLLBACK)) {
-                    performRollback(autoCloseableContext.context(), e.getInitialStepFailedException(), options);
+                    performRollback(
+                        autoCloseableContext.context(),
+                        e.getInitialStepFailedException(),
+                        options,
+                        null
+                    );
                 }
                 throw e;
             } catch (Throwable e) {
-                performRollback(autoCloseableContext.context(), e, options);
+                performRollback(
+                    autoCloseableContext.context(),
+                    e,
+                    options,
+                    null
+                );
                 throw new KanalarzException.KanalarzThrownOutsideOfStepException(e);
             }
+        }
+    }
+
+    private KanalarzStepReplayer createStepReplayer(UUID resumesContext, EnumSet<Option> options) {
+        if (resumesContext == null) {
+            throw new KanalarzException.KanalarzIllegalUsageException(
+                "Resume replay only makes sense when resuming some context! " +
+                    "Tried to resume replay with a fresh context!"
+            );
+        }
+
+        var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(resumesContext);
+
+        if (options.contains(Option.OUT_OF_ORDER_REPLAY)) {
+            return new KanalarzStepReplayer.KanalarzOutOfOrderStepReplayer(serialization, stepsRegistry, executedSteps);
+        } else {
+            return new KanalarzStepReplayer.KanalarzInOrderStepReplayer(serialization, stepsRegistry, executedSteps);
         }
     }
 
@@ -249,16 +291,25 @@ public class Kanalarz {
         @Nullable UUID resumesContext,
         @NonNull EnumSet<Option> options
     ) {
-        try (var autoCloseableContext = new AutoCloseableContext(metadata, resumesContext)) {
-            performRollback(autoCloseableContext.context(), null, options);
+        try (var autoCloseableContext = new AutoCloseableContext(metadata, resumesContext, options, null)) {
+            performRollback(autoCloseableContext.context(), null, options, null);
         }
     }
 
-    private void performRollback(@NonNull KanalarzContext context, Throwable originalError, EnumSet<Option> options) {
+    private void performRollback(
+        @NonNull KanalarzContext context,
+        Throwable originalError,
+        EnumSet<Option> options,
+        @Nullable Set<UUID> specificStepsToRollbackOnly
+    ) {
         var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(context.getId());
         var executedRollbacks =
             executedSteps.stream()
                 .filter(it -> it.wasRollbackFor().isPresent())
+                .filter(it ->
+                    specificStepsToRollbackOnly == null ||
+                        specificStepsToRollbackOnly.contains(it.stepId())
+                )
                 .collect(
                     Collectors.toMap(
                         it -> it.wasRollbackFor().get(),
@@ -311,7 +362,7 @@ public class Kanalarz {
 
             var deserializedParams = serialization.deserializeParameters(
                 rollforward.serializedExecutionResult(),
-                makeDeserializeParamsInfo(stepInfo.paramsInfo),
+                Utils.makeDeserializeParamsInfo(stepInfo.paramsInfo),
                 StepOut.unwrapStepOutType(stepInfo.returnType)
             );
             if (deserializedParams.executionError() != null) {
@@ -359,8 +410,8 @@ public class Kanalarz {
                     throw new KanalarzException.KanalarzInternalError(e.getMessage(), e);
                 }
 
-                var serializedResult = serialization.serializeStepExecution(
-                    makeSerializeParametersInfo(parameters, rollback),
+                var serializedResult = serialization.serializeStepCalled(
+                    Utils.makeSerializeParametersInfo(parameters, rollback),
                     new KanalarzSerialization.SerializeReturnInfo(
                         rollback.returnType,
                         result,
@@ -380,20 +431,13 @@ public class Kanalarz {
                     failed
                 ));
 
-                if (failed && !rollback.rollback.fallible() && !options.contains(Option.ALL_ROLLBACKS_FALLIBLE)) {
+                if (failed && !rollback.rollback.fallible() && !options.contains(Option.ALL_ROLLBACK_STEPS_FALLIBLE)) {
                     throw new KanalarzException.KanalarzRollbackStepFailedException(originalError, error);
                 }
 
                 return null;
             });
         }
-    }
-
-    private List<KanalarzSerialization.DeserializeParameterInfo>
-    makeDeserializeParamsInfo(List<StepInfoClasses.ParamInfo> paramsInfo) {
-        return paramsInfo.stream()
-            .map(it -> new KanalarzSerialization.DeserializeParameterInfo(it.paramName, it.type))
-            .toList();
     }
 
     public class KanalarzContextBuilder {
@@ -439,11 +483,22 @@ public class Kanalarz {
         }
 
         public <T> T start(Function<KanalarzContext, T> block) {
-            return inContext(metadata, resumeContext, block, options);
+            return inContext(metadata, resumeContext, block, options, false);
+        }
+
+        public <T> T startResumeReplay(Function<KanalarzContext, T> block) {
+            return inContext(metadata, resumeContext, block, options, true);
         }
 
         public void consume(Consumer<KanalarzContext> block) {
             start(ctx -> {
+                block.accept(ctx);
+                return null;
+            });
+        }
+
+        public void consumeResumeReplay(Consumer<KanalarzContext> block) {
+            startResumeReplay(ctx -> {
                 block.accept(ctx);
                 return null;
             });
@@ -464,8 +519,18 @@ public class Kanalarz {
         private final KanalarzContext context;
         private final UUID newContextId;
 
-        AutoCloseableContext(Map<String, String> metadata, UUID resumesContext) {
-            context = new KanalarzContext(Kanalarz.this, resumesContext);
+        AutoCloseableContext(
+            Map<String, String> metadata,
+            UUID resumesContext,
+            EnumSet<Option> options,
+            KanalarzStepReplayer stepReplayer
+        ) {
+            context = new KanalarzContext(
+                Kanalarz.this,
+                resumesContext,
+                options,
+                stepReplayer
+            );
             newContextId = context.getId();
             context.putAllMetadata(metadata);
             kanalarzContextThreadLocal.set(context);
@@ -490,13 +555,18 @@ public class Kanalarz {
 
     public enum Option {
         DEFER_ROLLBACK,
-        ALL_ROLLBACKS_FALLIBLE,
+        ALL_ROLLBACK_STEPS_FALLIBLE,
         SKIP_FAILED_ROLLBACKS,
         RETRY_FAILED_ROLLBACKS,
+        OUT_OF_ORDER_REPLAY,
+        NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED,
+        IGNORE_NOT_REPLAYED_STEPS,
+        ROLLBACK_NOT_REPLAYED_STEPS,
         ;
 
         private static final List<EnumSet<Option>> incompatible = List.of(
-            EnumSet.of(SKIP_FAILED_ROLLBACKS, RETRY_FAILED_ROLLBACKS)
+            EnumSet.of(SKIP_FAILED_ROLLBACKS, RETRY_FAILED_ROLLBACKS),
+            EnumSet.of(IGNORE_NOT_REPLAYED_STEPS, ROLLBACK_NOT_REPLAYED_STEPS)
         );
     }
 }

@@ -4,10 +4,7 @@ import jakarta.annotation.Nonnull;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -16,12 +13,23 @@ public class KanalarzContext {
 
     private final UUID id;
     private final Kanalarz kanalarz;
+    private final EnumSet<Kanalarz.Option> options;
     private final Map<String, String> metadata = new ConcurrentHashMap<>();
     private final AtomicReference<UUID> runningStepId = new AtomicReference<>();
 
-    KanalarzContext(Kanalarz kanalarz, @Nullable UUID resumesId) {
+    @Nullable
+    private KanalarzStepReplayer stepReplayer;
+
+    KanalarzContext(
+        Kanalarz kanalarz,
+        @Nullable UUID resumesId,
+        EnumSet<Kanalarz.Option> options,
+        @Nullable KanalarzStepReplayer stepReplayer
+    ) {
         this.kanalarz = kanalarz;
         this.id = resumesId != null ? resumesId : UUID.randomUUID();
+        this.options = options;
+        this.stepReplayer = stepReplayer;
     }
 
     @NonNull
@@ -60,6 +68,20 @@ public class KanalarzContext {
     @Nullable
     public String removeMetadata(@NonNull String key) {
         return this.metadata.remove(key);
+    }
+
+    @Nullable
+    KanalarzStepReplayer stepReplayer() {
+        return stepReplayer;
+    }
+
+    void clearStepReplayer() {
+        stepReplayer = null;
+    }
+
+    @NonNull
+    boolean optionEnabled(Kanalarz.Option option) {
+        return options.contains(option);
     }
 
     <T> T withStepId(Function<UUID, T> block) {

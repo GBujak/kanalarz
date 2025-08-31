@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.gbujak.kanalarz.KanalarzSerialization;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Type;
@@ -20,9 +21,9 @@ public class TestSerialization implements KanalarzSerialization {
 
     @NotNull
     @Override
-    public String serializeStepExecution(
+    public String serializeStepCalled(
         @NotNull List<SerializeParameterInfo> parametersInfo,
-        @NotNull SerializeReturnInfo returnInfo
+        @Nullable SerializeReturnInfo returnInfo
     ) {
         var serialized = mapper.createObjectNode();
 
@@ -37,12 +38,14 @@ public class TestSerialization implements KanalarzSerialization {
         }
         serialized.set("params", params);
 
-        var result = mapper.createObjectNode();
-        result.put("secret", returnInfo.secret());
-        result.put("type", returnInfo.type().getTypeName());
-        result.put("error", returnInfo.error() != null ? returnInfo.error().toString() : null);
-        result.set("value", mapper.valueToTree(returnInfo.value()));
-        serialized.set("returnInfo", result);
+        if (returnInfo != null) {
+            var result = mapper.createObjectNode();
+            result.put("secret", returnInfo.secret());
+            result.put("type", returnInfo.type().getTypeName());
+            result.put("error", returnInfo.error() != null ? returnInfo.error().toString() : null);
+            result.set("value", mapper.valueToTree(returnInfo.value()));
+            serialized.set("returnInfo", result);
+        }
 
         return serialized.toPrettyString();
     }
@@ -101,5 +104,15 @@ public class TestSerialization implements KanalarzSerialization {
             result,
             error != null ? new RuntimeException(error) : null
         );
+    }
+
+    @Override
+    public boolean parametersAreEqualIgnoringReturn(String left, String right) {
+        try {
+            return mapper.readTree(left).get("params")
+                .equals(mapper.readTree(right).get("params"));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
