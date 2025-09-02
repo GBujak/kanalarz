@@ -6,7 +6,6 @@ import org.springframework.lang.Nullable;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 public class KanalarzContext {
@@ -15,7 +14,15 @@ public class KanalarzContext {
     private final Kanalarz kanalarz;
     private final EnumSet<Kanalarz.Option> options;
     private final Map<String, String> metadata = new ConcurrentHashMap<>();
-    private final AtomicReference<UUID> runningStepId = new AtomicReference<>();
+
+    public record StepStack(@NonNull UUID current, @Nullable StepStack parents) {
+
+        @Nullable
+        UUID parentStepId() {
+            return parents == null ? null : parents.current();
+        }
+    }
+    private final ThreadLocal<StepStack> stepStack = new InheritableThreadLocal<>();
 
     @Nullable
     private KanalarzStepReplayer stepReplayer;
@@ -71,6 +78,11 @@ public class KanalarzContext {
     }
 
     @Nullable
+    public StepStack stepStack() {
+        return stepStack.get();
+    }
+
+    @Nullable
     KanalarzStepReplayer stepReplayer() {
         return stepReplayer;
     }
@@ -84,22 +96,12 @@ public class KanalarzContext {
         return options.contains(option);
     }
 
-    <T> T withStepId(Function<UUID, T> block) {
-        var stepId = UUID.randomUUID();
-        if (!runningStepId.compareAndSet(null, stepId)) {
-            // TODO: allow to run steps concurrently
-            throw new RuntimeException(
-                "Step is already running, can't have more that one step in the context running concurrently!"
-            );
-        }
+    <T> T withStepId(Function<StepStack, T> block) {
+        stepStack.set(new StepStack(UUID.randomUUID(), stepStack.get()));
         try {
-            return block.apply(stepId);
+            return block.apply(stepStack.get());
         } finally {
-            if (!runningStepId.compareAndSet(stepId, null)) {
-                // this should never happen unless there's a bug in the library
-                // noinspection ThrowFromFinallyBlock
-                throw new RuntimeException("Logic error! Step ID has changed during step execution");
-            }
+            stepStack.set(stepStack.get().parents());
         }
     }
 }

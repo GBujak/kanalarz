@@ -1,11 +1,7 @@
 package com.gbujak.kanalarz;
 
-import com.gbujak.kanalarz.annotations.Step;
-import com.gbujak.kanalarz.annotations.StepsHolder;
-
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.BiFunction;
 
 sealed interface KanalarzStepReplayer {
 
@@ -15,7 +11,7 @@ sealed interface KanalarzStepReplayer {
 
         private final KanalarzSerialization serialization;
         private final KanalarzStepsRegistry stepsRegistry;
-        private final List<KanalarzPersistence.StepExecutedInfo> stepsExecuted;
+        private final List<KanalarzPersistence.StepExecutedInfo> stepsToReplay;
         private Object nextStepReturnValue = noReturnValueMarker;
         private int currentStep = 0;
         private final ReentrantLock lock = new ReentrantLock();
@@ -27,11 +23,48 @@ sealed interface KanalarzStepReplayer {
         ) {
             this.serialization = serialization;
             this.stepsRegistry = stepsRegistry;
-            this.stepsExecuted = stepsExecuted.stream().filter(it -> !it.failed()).toList();
+            this.stepsToReplay = buildStepsToReplay(stepsExecuted);
+        }
+
+        static private List<KanalarzPersistence.StepExecutedInfo>
+        buildStepsToReplay(List<KanalarzPersistence.StepExecutedInfo> stepsExecuted) {
+            List<KanalarzPersistence.StepExecutedInfo> result = new ArrayList<>();
+            HashSet<UUID> parentsProcessed = new HashSet<>();
+
+            stepLoop: for (int i = 0; i < stepsExecuted.size(); i++) {
+                var step = stepsExecuted.get(i);
+
+                if (step.failed()) {
+                    continue;
+                }
+
+                var parentId = step.parentStepId().orElse(null);
+                if (parentId == null || parentsProcessed.contains(parentId)) {
+                    result.add(step);
+                    continue;
+                }
+
+                parentLoop: for (int j = i + 1; j < stepsExecuted.size(); j++) {
+                    var parent = stepsExecuted.get(j);
+                    if (!parent.stepId().equals(parentId)) {
+                        continue parentLoop;
+                    }
+
+                    if (!parent.failed()) {
+                        continue stepLoop;
+                    }
+
+                    parentsProcessed.add(parentId);
+                    result.add(parent);
+                    result.add(step);
+                }
+            }
+
+            return result;
         }
 
         @Override
-        public boolean findNextStep(String stepIdentifier, String serializedParametersInfo) {
+        public SearchResult findNextStep(String stepIdentifier, String serializedParametersInfo) {
             try {
                 lock.lock();
 
@@ -42,28 +75,31 @@ sealed interface KanalarzStepReplayer {
                     );
                 }
 
-                var executedStep = stepsExecuted.get(currentStep);
+                var executedStep = stepsToReplay.get(currentStep);
                 if (!stepIdentifier.equals(executedStep.stepIdentifier())) {
-                    return false;
+                    return SearchResult.NOT_FOUND;
                 }
 
                 if (!serialization.parametersAreEqualIgnoringReturn(
                     executedStep.serializedExecutionResult(),
                     serializedParametersInfo
                 )) {
-                    return false;
+                    return SearchResult.NOT_FOUND;
                 }
 
-                var executedStepInfo = stepsRegistry.getStepInfoOrThrow(executedStep.stepIdentifier());
-                nextStepReturnValue = serialization.deserializeParameters(
-                    executedStep.serializedExecutionResult(),
-                    Utils.makeDeserializeParamsInfo(executedStepInfo.paramsInfo),
-                    executedStepInfo.returnType
-                ).executionResult();
-
                 currentStep++;
-                return true;
+                var executedStepInfo = stepsRegistry.getStepInfoOrThrow(executedStep.stepIdentifier());
 
+                if (executedStep.failed()) {
+                    return SearchResult.FOUND_SHOULD_RERUN;
+                } else {
+                    nextStepReturnValue = serialization.deserializeParameters(
+                        executedStep.serializedExecutionResult(),
+                        Utils.makeDeserializeParamsInfo(executedStepInfo.paramsInfo),
+                        executedStepInfo.returnType
+                    ).executionResult();
+                    return SearchResult.FOUND;
+                }
             } finally {
                 lock.unlock();
             }
@@ -89,12 +125,12 @@ sealed interface KanalarzStepReplayer {
 
         @Override
         public boolean isDone() {
-            return currentStep >= stepsExecuted.size();
+            return currentStep >= stepsToReplay.size();
         }
 
         @Override
         public List<KanalarzPersistence.StepExecutedInfo> unreplayed() {
-            return stepsExecuted.stream().skip(currentStep).toList();
+            return stepsToReplay.stream().skip(currentStep).toList();
         }
     }
 
@@ -123,7 +159,7 @@ sealed interface KanalarzStepReplayer {
         }
 
         @Override
-        public boolean findNextStep(String stepIdentifier, String serializedParametersInfo) {
+        public SearchResult findNextStep(String stepIdentifier, String serializedParametersInfo) {
             try {
                 lock.lock();
 
@@ -160,9 +196,9 @@ sealed interface KanalarzStepReplayer {
                     if (firstUnreplayedIndex == i) {
                         firstUnreplayedIndex++;
                     }
-                    return true;
+                    return SearchResult.FOUND;
                 }
-                return false;
+                return SearchResult.NOT_FOUND;
 
             } finally {
                 lock.unlock();
@@ -204,8 +240,14 @@ sealed interface KanalarzStepReplayer {
         }
     }
 
-    boolean findNextStep(String stepIdentifier, String serializedParametersInfo);
+    SearchResult findNextStep(String stepIdentifier, String serializedParametersInfo);
     Object getNextStepReturnValue();
     boolean isDone();
     List<KanalarzPersistence.StepExecutedInfo> unreplayed();
+
+    enum SearchResult {
+        FOUND,
+        NOT_FOUND,
+        FOUND_SHOULD_RERUN
+    }
 }

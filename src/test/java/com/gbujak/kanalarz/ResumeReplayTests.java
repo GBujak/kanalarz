@@ -28,9 +28,8 @@ class ResumeReplayTestService {
         return List.copyOf(messages);
     }
 
-    public List<String> remove(String message) {
-        messages.remove(message);
-        return List.copyOf(messages);
+    public void remove(String message) {
+        messages.remove(messages.lastIndexOf(message));
     }
 
     public List<String> getMessages() {

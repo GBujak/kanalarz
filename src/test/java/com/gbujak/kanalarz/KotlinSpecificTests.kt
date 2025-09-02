@@ -1,7 +1,6 @@
 package com.gbujak.kanalarz
 
 import com.gbujak.kanalarz.annotations.Rollback
-import com.gbujak.kanalarz.annotations.RollforwardOut
 import com.gbujak.kanalarz.annotations.Step
 import com.gbujak.kanalarz.annotations.StepsHolder
 import org.assertj.core.api.Assertions.assertThat
@@ -9,7 +8,6 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.stereotype.Component
-import kotlin.jvm.Throws
 
 @Component
 internal open class KotlinSpecificTestsService {

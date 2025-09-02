@@ -77,13 +77,14 @@ public class Kanalarz {
         }
 
         return context.withStepId(
-            stepId -> handleInContextMethodExecution(
+            stepStack -> handleInContextMethodExecution(
                 target,
                 method,
                 arguments,
                 stepsHolder,
                 step,
-                stepId,
+                stepStack.current(),
+                stepStack.parentStepId(),
                 context
             )
         );
@@ -96,6 +97,7 @@ public class Kanalarz {
         StepsHolder stepsHolder,
         Step step,
         UUID stepId,
+        @Nullable UUID parentStepId,
         KanalarzContext context
     ) {
         if (!cancellableContexts.contains(context.getId())) {
@@ -115,14 +117,17 @@ public class Kanalarz {
                 context.clearStepReplayer();
             }
 
-            if (foundStep) {
+            if (foundStep == KanalarzStepReplayer.SearchResult.FOUND) {
                 return StepOut.isTypeStepOut(stepInfo.returnType)
                     ? StepOut.of(stepReplayer.getNextStepReturnValue())
                     : stepReplayer.getNextStepReturnValue();
-            } else if (!context.optionEnabled(Option.NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED)) {
+            } else if (
+                foundStep == KanalarzStepReplayer.SearchResult.NOT_FOUND &&
+                    !context.optionEnabled(Option.NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED)
+            ) {
                 throw new KanalarzException.KanalarzNewStepBeforeReplayEndedException(
                     stepIdentifier + " was called with parameters it hadn't been called with before or " +
-                        "it hadn't been called before at all."
+                        "it hadn't been called before at all: " + serializedParameters
                 );
             }
         }
@@ -130,6 +135,7 @@ public class Kanalarz {
         persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
             context.getId(),
             stepId,
+            Optional.ofNullable(parentStepId),
             Optional.empty(),
             context.fullMetadata(),
             stepIdentifier,
@@ -184,6 +190,7 @@ public class Kanalarz {
         persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
             context.getId(),
             stepId,
+            Optional.ofNullable(parentStepId),
             Optional.empty(),
             Collections.unmodifiableMap(context.fullMetadata()),
             stepIdentifier,
@@ -401,10 +408,11 @@ public class Kanalarz {
                 }
             }
 
-            context.withStepId(stepId -> {
+            context.withStepId(stepStack -> {
                 persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
                     context.getId(),
-                    stepId,
+                    stepStack.current(),
+                    Optional.empty(),
                     Optional.of(rollforward.stepId()),
                     context.fullMetadata(),
                     KanalarzStepsRegistry.stepIdentifier(rollback.stepsHolder, rollback.rollback),
@@ -434,7 +442,8 @@ public class Kanalarz {
                 boolean failed = error != null;
                 persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
                     context.getId(),
-                    stepId,
+                    stepStack.current(),
+                    Optional.empty(),
                     Optional.of(rollforward.stepId()),
                     context.fullMetadata(),
                     KanalarzStepsRegistry.stepIdentifier(rollback.stepsHolder, rollback.rollback),
@@ -583,6 +592,7 @@ public class Kanalarz {
         ALL_ROLLBACK_STEPS_FALLIBLE,
         SKIP_FAILED_ROLLBACKS,
         RETRY_FAILED_ROLLBACKS,
+        FAIL_ON_NESTED_STEP_WITH_ROLLBACK,
         OUT_OF_ORDER_REPLAY,
         NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED(OUT_OF_ORDER_REPLAY),
         IGNORE_NOT_REPLAYED_STEPS,
