@@ -139,6 +139,7 @@ public class Kanalarz {
             Optional.empty(),
             context.fullMetadata(),
             stepIdentifier,
+            stepInfo.description,
             step.fallible()
         ));
 
@@ -194,6 +195,7 @@ public class Kanalarz {
             Optional.empty(),
             Collections.unmodifiableMap(context.fullMetadata()),
             stepIdentifier,
+            stepInfo.description,
             resultSerialized,
             failed
         ));
@@ -415,7 +417,8 @@ public class Kanalarz {
                     Optional.empty(),
                     Optional.of(rollforward.stepId()),
                     context.fullMetadata(),
-                    KanalarzStepsRegistry.stepIdentifier(rollback.stepsHolder, rollback.rollback),
+                    KanalarzStepsRegistry.rollbackIdentifier(rollback.stepsHolder, rollback.rollback),
+                    rollback.description,
                     rollback.rollback.fallible()
                 ));
 
@@ -446,7 +449,8 @@ public class Kanalarz {
                     Optional.empty(),
                     Optional.of(rollforward.stepId()),
                     context.fullMetadata(),
-                    KanalarzStepsRegistry.stepIdentifier(rollback.stepsHolder, rollback.rollback),
+                    KanalarzStepsRegistry.rollbackIdentifier(rollback.stepsHolder, rollback.rollback),
+                    rollback.description,
                     serializedResult,
                     failed
                 ));

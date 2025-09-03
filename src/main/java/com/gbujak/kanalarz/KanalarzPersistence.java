@@ -1,6 +1,7 @@
 package com.gbujak.kanalarz;
 
 import org.springframework.lang.NonNull;
+import org.springframework.lang.Nullable;
 
 import java.util.List;
 import java.util.Map;
@@ -16,6 +17,7 @@ public interface KanalarzPersistence {
         @NonNull Optional<UUID> stepIsRollbackFor,
         @NonNull Map<String, String> metadata,
         @NonNull String stepIdentifier,
+        @Nullable String description,
         boolean isFallible
     ) {}
     void stepStarted(StepStartedEvent stepStartedEvent);
@@ -27,6 +29,7 @@ public interface KanalarzPersistence {
         @NonNull Optional<UUID> stepIsRollbackFor,
         @NonNull Map<String, String> metadata,
         @NonNull String stepIdentifier,
+        @Nullable String description,
         @NonNull String serializedExecutionResult,
         boolean failed
     ) {}
