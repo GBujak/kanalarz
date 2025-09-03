@@ -35,7 +35,6 @@ class TestNestedStepsService {
     }
 
     public void remove(String value) {
-        System.out.println("removing " + value);
         if (!values.getLast().equals(value)) {
             throw new RuntimeException("bad value: got " + value + " expected " + values.getLast());
         }
@@ -94,11 +93,25 @@ class TestNestedSteps {
     public void throwOnNextAddAllTwice(RuntimeException exception) {
         testException = exception;
     }
+
+    @Step(identifier = "nested-with-rollback")
+    public List<String> addAllAndExtraNestedWithRollback(List<String> values) {
+        List<String> result = null;
+        for (var value : values) {
+            result = self.add(value);
+        }
+        service.add("extra");
+        return result;
+    }
+
+    @Rollback(forStep = "nested-with-rollback")
+    public void addAllAndExtraNestedWithRollbackRollback() {
+        service.remove("extra");
+    }
 }
 
 @SpringBootTest
 public class NestedStepsTests {
-
     @Autowired private Kanalarz kanalarz;
     @Autowired private KanalarzPersistence persistence;
     @Autowired private TestNestedStepsService service;
@@ -173,8 +186,6 @@ public class NestedStepsTests {
             .isExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
             .hasCause(exception);
 
-        System.out.println(persistence.getExecutedStepsInContextInOrderOfExecution(contextId));
-
         assertThat(service.values()).isEmpty();
 
         assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
@@ -204,8 +215,6 @@ public class NestedStepsTests {
         )
             .isExactlyInstanceOf(KanalarzException.KanalarzStepFailedException.class)
             .hasCause(testException);
-
-        System.out.println(persistence.getExecutedStepsInContextInOrderOfExecution(contextId));
 
         assertThat(service.values()).isEmpty();
 
@@ -239,5 +248,23 @@ public class NestedStepsTests {
 
         assertThat(service.values())
             .isEqualTo(List.of("test-1", "test-2", "test-3", "test-4", "test-5", "test-4", "test-5"));
+    }
+
+    @Test
+    void shouldRollbackNestedStepWithRollback() {
+        RuntimeException exception = new RuntimeException("");
+
+        assertThatThrownBy(() ->
+            kanalarz.newContext().consume(ctx -> {
+                assertThat(steps.addAllAndExtraNestedWithRollback(List.of("test-1", "test-2", "test-3")))
+                    .isEqualTo(List.of("test-1", "test-2", "test-3", "extra"));
+
+                throw exception;
+            })
+        )
+            .isExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
+            .hasCause(exception);
+
+        assertThat(service.values()).isEmpty();
     }
 }
