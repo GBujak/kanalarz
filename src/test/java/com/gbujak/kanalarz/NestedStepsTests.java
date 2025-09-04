@@ -251,6 +251,48 @@ public class NestedStepsTests {
     }
 
     @Test
+    void doubleNestedStepResumeReplayOutOfOrder() {
+        UUID contextId = UUID.randomUUID();
+        RuntimeException testException = new RuntimeException("test");
+
+        Consumer<KanalarzContext> job = ctx -> {
+            assertThat(steps.add("test-1")).isEqualTo(List.of("test-1"));
+
+            assertThat(steps.addAll(List.of("test-2", "test-3")))
+                .isEqualTo(List.of("test-1", "test-2", "test-3"));
+
+            steps.addAllTwice(List.of("test-4", "test-5"));
+        };
+
+        Consumer<KanalarzContext> jobOutOfOrder = ctx -> {
+            // ------ these 2 are swapped ------
+            assertThat(steps.addAll(List.of("test-2", "test-3")))
+                .isEqualTo(List.of("test-1", "test-2", "test-3"));
+
+            assertThat(steps.add("test-1")).isEqualTo(List.of("test-1"));
+            // ----------------------------------
+
+            steps.addAllTwice(List.of("test-4", "test-5"));
+        };
+
+        steps.throwOnNextAddAllTwice(testException);
+        assertThatThrownBy(() ->
+            kanalarz.newContext().resumes(contextId).option(Kanalarz.Option.DEFER_ROLLBACK).consume(job)
+        );
+
+        assertThat(service.values())
+            .isEqualTo(List.of("test-1", "test-2", "test-3", "test-4", "test-5"));
+
+        kanalarz.newContext()
+            .resumes(contextId)
+            .option(Kanalarz.Option.OUT_OF_ORDER_REPLAY)
+            .consumeResumeReplay(jobOutOfOrder);
+
+        assertThat(service.values())
+            .isEqualTo(List.of("test-1", "test-2", "test-3", "test-4", "test-5", "test-4", "test-5"));
+    }
+
+    @Test
     void shouldRollbackNestedStepWithRollback() {
         RuntimeException exception = new RuntimeException("");
 
