@@ -1,35 +1,32 @@
 # Kanalarz
 
-Simple Spring library for persistent rollbacks - atomic jobs made of steps that
-can define their own rollback actions. 
+Simple Spring library for persistent atomic jobs made of steps with rollbacks. 
 
 You write the steps with rollbacks, write a job that calls these steps, and
-calling the rollbacks in case of a failure in the right order is handled for you
+calling the rollbacks in case of a failure in the right order is handled
 automatically. 
 
-This library stores all the pipeline information using a simple interface that
-you implement in your application. This interface can save the pipeline
-information to the database allowing you to resume and/or rollback the pipelines
-even if the java process is killed in the middle of the pipeline.
+This library stores all the pipeline information using an interface that you
+implement. This interface can save the pipeline information to the database
+allowing you to resume and/or rollback the pipelines even if the java process
+is killed in the middle of the pipeline.
+
+[Definition here](src/main/java/com/gbujak/kanalarz/KanalarzPersistence.java)
 
 **As a side effect, the persisted data will be a log of every step ever
-executed, including its parameters and the return value which is great for
-observability.**
+executed, including parameters and return values.**
 
 This library uses the Spring Framework BeanPostProcessor mechanism, similar to
-Spring's `@Transactional`. The type safety of the rollforward and rollback steps
-is verified when the Spring context is being created. (Watch out - when calling
+Spring's `@Transactional`. (Watch out - when calling
 steps through `this` you must self-inject like with `@Transactional`)
 
-If you accidentaly try to inject a parameter or the return value of the
-rollforward step in the rollback step but the type or nullability is different,
-the context will fail to start with a descriptive error telling you what type
-and what nullability was expected for which argument.
+You can inject rollforward step parameters and return values in rollback steps.
+The typesafety is validated when the spring context is starting. Any difference
+in type of nullability will cause the context creation to fail.
 
 This library determines the nullability by checking the most popular Java
-annotations (including `@Nullmarked` on the package and on the class) and by
-checking the Kotlin nullability using the `org.jetbrains.kotlin:kotlin-reflect`
-library.
+annotations (including `@Nullmarked` on the package and on the class). Kotlin
+nullability is checked using the `org.jetbrains.kotlin:kotlin-reflect` library.
 
 ```java
 @Component 
@@ -115,8 +112,8 @@ assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId)).h
 ## Nested steps
 
 The library allows you to arbitrarily nest steps. The rollback of the parent is
-called **before** any of the rollbacks of the children. It is not recommended to
-have parent steps with rollbacks at all.
+called **before** any of the rollbacks of the children. Parent steps with
+rollbacks are not recommended.
 
 ## Resume replay
 
