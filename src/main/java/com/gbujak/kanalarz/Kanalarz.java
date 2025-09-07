@@ -1,5 +1,6 @@
 package com.gbujak.kanalarz;
 
+import com.gbujak.kanalarz.KanalarzStepReplayer.SearchResult;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.aopalliance.intercept.MethodInvocation;
@@ -117,18 +118,25 @@ public class Kanalarz {
                 context.clearStepReplayer();
             }
 
-            if (foundStep == KanalarzStepReplayer.SearchResult.FOUND) {
-                return StepOut.isTypeStepOut(stepInfo.returnType)
-                    ? StepOut.of(stepReplayer.getNextStepReturnValue())
-                    : stepReplayer.getNextStepReturnValue();
-            } else if (
-                foundStep == KanalarzStepReplayer.SearchResult.NOT_FOUND &&
-                    !context.optionEnabled(Option.NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED)
-            ) {
-                throw new KanalarzException.KanalarzNewStepBeforeReplayEndedException(
-                    stepIdentifier + " was called with parameters it hadn't been called with before or " +
-                        "it hadn't been called before at all: " + serializedParameters
-                );
+            switch (foundStep) {
+                case SearchResult.Found(var value) -> {
+                    return
+                        StepOut.isTypeStepOut(stepInfo.returnType)
+                            ? StepOut.of(value)
+                            : value;
+                }
+
+                case SearchResult.FoundShouldRerun foundShouldRerun -> {}
+
+                case SearchResult.NotFound notFound
+                    when context.optionEnabled(Option.NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED) -> {}
+
+                case SearchResult.NotFound notFound -> {
+                    throw new KanalarzException.KanalarzNewStepBeforeReplayEndedException(
+                        stepIdentifier + " was called with parameters it hadn't been called with before or " +
+                            "it hadn't been called before at all: " + serializedParameters
+                    );
+                }
             }
         }
 

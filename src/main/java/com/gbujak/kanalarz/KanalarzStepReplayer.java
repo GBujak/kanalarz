@@ -7,12 +7,9 @@ sealed interface KanalarzStepReplayer {
 
     final class KanalarzInOrderStepReplayer implements KanalarzStepReplayer {
 
-        private static final Object noReturnValueMarker = new Object();
-
         private final KanalarzSerialization serialization;
         private final KanalarzStepsRegistry stepsRegistry;
         private final List<KanalarzPersistence.StepExecutedInfo> stepsToReplay;
-        private Object nextStepReturnValue = noReturnValueMarker;
         private int currentStep = 0;
         private final ReentrantLock lock = new ReentrantLock();
 
@@ -40,47 +37,28 @@ sealed interface KanalarzStepReplayer {
 
                 var executedStep = stepsToReplay.get(currentStep);
                 if (!stepIdentifier.equals(executedStep.stepIdentifier())) {
-                    return SearchResult.NOT_FOUND;
+                    return new SearchResult.NotFound();
                 }
 
                 if (!serialization.parametersAreEqualIgnoringReturn(
                     executedStep.serializedExecutionResult(),
                     serializedParametersInfo
                 )) {
-                    return SearchResult.NOT_FOUND;
+                    return SearchResult.NotFound;
                 }
 
                 currentStep++;
                 var executedStepInfo = stepsRegistry.getStepInfoOrThrow(executedStep.stepIdentifier());
 
                 if (executedStep.failed()) {
-                    return SearchResult.FOUND_SHOULD_RERUN;
+                    return SearchResult.FoundShouldRerun;
                 } else {
-                    nextStepReturnValue = serialization.deserializeParameters(
+                    return new SearchResult.Found(serialization.deserializeParameters(
                         executedStep.serializedExecutionResult(),
                         Utils.makeDeserializeParamsInfo(executedStepInfo.paramsInfo),
                         executedStepInfo.returnType
-                    ).executionResult();
-                    return SearchResult.FOUND;
+                    ).executionResult());
                 }
-            } finally {
-                lock.unlock();
-            }
-        }
-
-        @Override
-        public Object getNextStepReturnValue() {
-            try {
-                lock.lock();
-                var tmp = nextStepReturnValue;
-                if (tmp == noReturnValueMarker) {
-                    throw new KanalarzException.KanalarzInternalError(
-                        "Tried to get return value from in order step replayer twice or before finding next step",
-                        null
-                    );
-                }
-                nextStepReturnValue = noReturnValueMarker;
-                return tmp;
             } finally {
                 lock.unlock();
             }
@@ -99,12 +77,9 @@ sealed interface KanalarzStepReplayer {
 
     final class KanalarzOutOfOrderStepReplayer implements KanalarzStepReplayer {
 
-        private static final Object noReturnValueMarker = new Object();
-
         private final KanalarzSerialization serialization;
         private final KanalarzStepsRegistry stepsRegistry;
         private final List<KanalarzPersistence.StepExecutedInfo> stepsToReplay;
-        private Object nextStepReturnValue = noReturnValueMarker;
         private final ReentrantLock lock = new ReentrantLock();
 
         private final boolean[] stepsReplayed;
@@ -156,36 +131,17 @@ sealed interface KanalarzStepReplayer {
                     var executedStepInfo = stepsRegistry.getStepInfoOrThrow(executedStep.stepIdentifier());
 
                     if (executedStep.failed()) {
-                        return SearchResult.FOUND_SHOULD_RERUN;
+                        return SearchResult.FoundShouldRerun;
                     } else {
-                        nextStepReturnValue = serialization.deserializeParameters(
+                        return new SearchResult.Found(serialization.deserializeParameters(
                             executedStep.serializedExecutionResult(),
                             Utils.makeDeserializeParamsInfo(executedStepInfo.paramsInfo),
                             executedStepInfo.returnType
-                        ).executionResult();
-                        return SearchResult.FOUND;
+                        ).executionResult());
                     }
                 }
-                return SearchResult.NOT_FOUND;
+                return SearchResult.NotFound;
 
-            } finally {
-                lock.unlock();
-            }
-        }
-
-        @Override
-        public Object getNextStepReturnValue() {
-            try {
-                lock.lock();
-                var tmp = nextStepReturnValue;
-                if (tmp == noReturnValueMarker) {
-                    throw new KanalarzException.KanalarzInternalError(
-                        "Tried to get return value from out of order step replayer twice or before finding next step",
-                        null
-                    );
-                }
-                nextStepReturnValue = noReturnValueMarker;
-                return tmp;
             } finally {
                 lock.unlock();
             }
@@ -209,16 +165,8 @@ sealed interface KanalarzStepReplayer {
     }
 
     SearchResult findNextStep(String stepIdentifier, String serializedParametersInfo);
-    Object getNextStepReturnValue();
     boolean isDone();
     List<KanalarzPersistence.StepExecutedInfo> unreplayed();
-
-    enum SearchResult {
-        FOUND,
-        NOT_FOUND,
-        FOUND_SHOULD_RERUN
-    }
-
 
     static private List<KanalarzPersistence.StepExecutedInfo>
     buildStepsToReplay(List<KanalarzPersistence.StepExecutedInfo> stepsExecuted) {
@@ -255,5 +203,14 @@ sealed interface KanalarzStepReplayer {
         }
 
         return result;
+    }
+
+    sealed interface SearchResult {
+        record Found(Object value) implements SearchResult {}
+        record NotFound() implements SearchResult {}
+        record FoundShouldRerun() implements SearchResult {}
+
+        SearchResult NotFound = new NotFound();
+        SearchResult FoundShouldRerun = new FoundShouldRerun();
     }
 }
