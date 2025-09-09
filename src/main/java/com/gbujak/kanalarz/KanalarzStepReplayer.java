@@ -66,12 +66,22 @@ sealed interface KanalarzStepReplayer {
 
         @Override
         public boolean isDone() {
-            return currentStep >= stepsToReplay.size();
+            try {
+                lock.lock();
+                return currentStep >= stepsToReplay.size();
+            } finally {
+                lock.unlock();
+            }
         }
 
         @Override
         public List<KanalarzPersistence.StepExecutedInfo> unreplayed() {
-            return stepsToReplay.stream().skip(currentStep).toList();
+            try {
+                lock.lock();
+                return stepsToReplay.stream().skip(currentStep).toList();
+            } finally {
+                lock.unlock();
+            }
         }
     }
 
@@ -125,7 +135,12 @@ sealed interface KanalarzStepReplayer {
 
                     stepsReplayed[i] = true;
                     if (firstUnreplayedIndex == i) {
-                        firstUnreplayedIndex++;
+                        while (
+                            firstUnreplayedIndex < stepsReplayed.length &&
+                                stepsReplayed[firstUnreplayedIndex]
+                        ) {
+                            firstUnreplayedIndex++;
+                        }
                     }
 
                     var executedStepInfo = stepsRegistry.getStepInfoOrThrow(executedStep.stepIdentifier());
@@ -149,18 +164,28 @@ sealed interface KanalarzStepReplayer {
 
         @Override
         public boolean isDone() {
-            return firstUnreplayedIndex == stepsToReplay.size();
+            try {
+                lock.lock();
+                return firstUnreplayedIndex == stepsToReplay.size();
+            } finally {
+                lock.unlock();
+            }
         }
 
         @Override
         public List<KanalarzPersistence.StepExecutedInfo> unreplayed() {
-            List<KanalarzPersistence.StepExecutedInfo> result = new ArrayList<>();
-            for (int i = firstUnreplayedIndex; i < stepsToReplay.size(); i++) {
-                if (stepsReplayed[i]) {
-                    result.add(stepsToReplay.get(i));
+            try {
+                lock.lock();
+                List<KanalarzPersistence.StepExecutedInfo> result = new ArrayList<>();
+                for (int i = firstUnreplayedIndex; i < stepsToReplay.size(); i++) {
+                    if (stepsReplayed[i]) {
+                        result.add(stepsToReplay.get(i));
+                    }
                 }
+                return Collections.unmodifiableList(result);
+            } finally {
+                lock.unlock();
             }
-            return Collections.unmodifiableList(result);
         }
     }
 
