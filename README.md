@@ -109,6 +109,19 @@ assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId)).h
 
 [Or in Kotlin](src/test/java/com/gbujak/kanalarz/BasicTestsKotlin.kt)
 
+## Concurrency
+
+The library fully supports executing steps concurrently.
+
+Rollbacks will happen sequentially based on the time each step finished
+executing.
+
+Concurrent [resume replay](#resume-replay) is supported but out of order replay
+must be enabled when starting the pipeline or Kanalarz will throw an exception
+when steps are executed in non-deterministic order.
+
+[Concurrent examples here.](src/test/java/com/gbujak/kanalarz/ConcurrentTests.java)
+
 ## Nested steps
 
 The library allows you to arbitrarily nest steps. The rollback of the parent is
