@@ -2,6 +2,16 @@
 
 Simple Spring library for persistent atomic jobs made of steps with rollbacks. 
 
+<https://central.sonatype.com/artifact/com.gbujak/kanalarz>
+
+```
+<dependency>
+    <groupId>com.gbujak</groupId>
+    <artifactId>kanalarz</artifactId>
+    <version>0.2.0</version>
+</dependency>
+```
+
 You write the steps with rollbacks, write a job that calls these steps, and
 calling the rollbacks in case of a failure in the right order is handled
 automatically. 
