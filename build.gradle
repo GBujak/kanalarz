@@ -41,7 +41,7 @@ mavenPublishing {
     publishToMavenCentral()
     signAllPublications()
 
-    coordinates("com.gbujak.kanalarz", "kanalarz", System.getenv("RELEASE_VERSION"))
+    coordinates("com.gbujak", "kanalarz", System.getenv("RELEASE_VERSION"))
 
     pom {
         name = "Kanalarz"
