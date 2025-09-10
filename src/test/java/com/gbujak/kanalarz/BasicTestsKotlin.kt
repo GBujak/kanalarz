@@ -281,22 +281,14 @@ class BasicTestsKotlin {
             .isExactlyInstanceOf(KanalarzStepFailedException::class.java)
             .hasCauseExactlyInstanceOf(NameServiceNameAlreadyThatValueException::class.java)
 
-        AssertionsForClassTypes.assertThat(testNameService.name()).isEqualTo(testName2)
-        AssertionsForInterfaceTypes.assertThat<StepExecutedInfo?>(
-            persistence.getExecutedStepsInContextInOrderOfExecution(
-                contextId
-            )
-        )
+        assertThat(testNameService.name()).isEqualTo(testName2)
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
             .hasSize(3)
 
         kanalarz.newContext().resumes(contextId).rollbackNow()
 
-        AssertionsForClassTypes.assertThat(testNameService.name()).isNull()
-        AssertionsForInterfaceTypes.assertThat<StepExecutedInfo?>(
-            persistence.getExecutedStepsInContextInOrderOfExecution(
-                contextId
-            )
-        )
+        assertThat(testNameService.name()).isNull()
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
             .hasSize(5)
     }
 }
