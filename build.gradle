@@ -15,6 +15,15 @@ java {
 	}
 }
 
+bootJar {
+    enabled = false
+}
+
+jar {
+    enabled = true
+    archiveClassifier = ''
+}
+
 repositories {
 	mavenCentral()
 }
@@ -35,7 +44,6 @@ tasks.named('test') {
         logger.lifecycle("${descriptor}")
     }
 }
-
 
 mavenPublishing {
     publishToMavenCentral()
