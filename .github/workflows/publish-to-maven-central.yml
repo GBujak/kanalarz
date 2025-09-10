@@ -20,13 +20,10 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Build with Gradle
-        run: ./gradlew build
-
-      - name: Publish to GitHub Packages
-        run: ./gradlew publish
+      - name: Publish to Maven Central
+        run: ./gradlew publishToMavenCentral
         env:
-          RELEASE_VERSION: ${{ github.event.release.tag_name }
+          RELEASE_VERSION: ${{ github.event.release.tag_name }}
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.ORG_GRADLE_PROJECT_MAVENCENTRALUSERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.ORG_GRADLE_PROJECT_MAVENCENTRALPASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.ORG_GRADLE_PROJECT_SIGNINGINMEMORYKEY }}
