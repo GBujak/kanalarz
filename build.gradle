@@ -3,10 +3,11 @@ plugins {
 	id 'org.springframework.boot' version '3.5.5'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'org.jetbrains.kotlin.jvm'
+    id "com.vanniktech.maven.publish" version "0.34.0"
 }
 
 group = 'com.gbujak'
-version = '0.0.1-SNAPSHOT'
+version = System.getenv("RELEASE_VERSION") ?: '0.0.1-SNAPSHOT'
 
 java {
 	toolchain {
@@ -34,3 +35,38 @@ tasks.named('test') {
         logger.lifecycle("${descriptor}")
     }
 }
+
+
+mavenPublishing {
+    publishToMavenCentral()
+    signAllPublications()
+
+    coordinates("com.gbujak.kanalarz", "kanalarz", System.getenv("RELEASE_VERSION"))
+
+    pom {
+        name = "Kanalarz"
+        description = "A simple Spring rollback library."
+        inceptionYear = "2025"
+        url = "https://github.com/gbujak/kanalarz/"
+        licenses {
+            license {
+                name = "MIT License"
+                url = "https://opensource.org/license/mit"
+                distribution = "https://opensource.org/license/mit"
+            }
+        }
+        developers {
+            developer {
+                id = "gbujak"
+                name = "Grzegorz Bujak"
+                url = "https://github.com/gbujak/"
+            }
+        }
+        scm {
+            url = "https://github.com/gbujak/kanalarz/"
+            connection = "scm:git:git://github.com/gbujak/kanalarz.git"
+            developerConnection = "scm:git:ssh://git@github.com/gbujak/kanalarz.git"
+        }
+    }
+}
+
