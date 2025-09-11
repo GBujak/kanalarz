@@ -11,7 +11,6 @@ import java.util.function.Function;
 public class KanalarzContext {
 
     private final UUID id;
-    private final Kanalarz kanalarz;
     private final EnumSet<Kanalarz.Option> options;
     private final Map<String, String> metadata = new ConcurrentHashMap<>();
 
@@ -28,12 +27,10 @@ public class KanalarzContext {
     private KanalarzStepReplayer stepReplayer;
 
     KanalarzContext(
-        Kanalarz kanalarz,
         @Nullable UUID resumesId,
         EnumSet<Kanalarz.Option> options,
         @Nullable KanalarzStepReplayer stepReplayer
     ) {
-        this.kanalarz = kanalarz;
         this.id = resumesId != null ? resumesId : UUID.randomUUID();
         this.options = options;
         this.stepReplayer = stepReplayer;
@@ -91,8 +88,7 @@ public class KanalarzContext {
         stepReplayer = null;
     }
 
-    @NonNull
-    boolean optionEnabled(Kanalarz.Option option) {
+    public boolean optionEnabled(Kanalarz.Option option) {
         return options.contains(option);
     }
 

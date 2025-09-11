@@ -1,13 +1,11 @@
 package com.gbujak.kanalarz
 
 import com.gbujak.kanalarz.KanalarzException.*
-import com.gbujak.kanalarz.KanalarzPersistence.StepExecutedInfo
 import com.gbujak.kanalarz.TestNameServiceKotlin.NameServiceNameAlreadyThatValueException
 import com.gbujak.kanalarz.TestStepsKotlin.RollbackStepNameNoLongerTheSameException
 import com.gbujak.kanalarz.annotations.*
 import org.assertj.core.api.AssertionsForClassTypes
 import org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy
-import org.assertj.core.api.AssertionsForInterfaceTypes
 import org.assertj.core.api.AssertionsForInterfaceTypes.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

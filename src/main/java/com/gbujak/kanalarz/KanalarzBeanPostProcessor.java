@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-public class KanalarzBeanPostProcessor implements BeanPostProcessor {
+class KanalarzBeanPostProcessor implements BeanPostProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(KanalarzBeanPostProcessor.class);
 

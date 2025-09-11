@@ -10,6 +10,7 @@ import org.springframework.lang.Nullable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -17,7 +18,14 @@ import java.util.stream.Collectors;
 
 public class Kanalarz {
 
-    private final Set<UUID> cancellableContexts = Collections.synchronizedSet(new HashSet<>());
+    private final ConcurrentHashMap<UUID, CancellableContextState>
+        cancellableContexts = new ConcurrentHashMap<>();
+
+    enum CancellableContextState {
+        CANCELLABLE,
+        CANCELLED,
+        CANCELLED_FORCE_DEFER_ROLLBACK,
+    }
 
     private final KanalarzStepsRegistry stepsRegistry;
     private final KanalarzSerialization serialization;
@@ -34,7 +42,8 @@ public class Kanalarz {
     }
 
     private static final AtomicInteger activeContexts = new AtomicInteger();
-    private static final ThreadLocal<KanalarzContext> kanalarzContextThreadLocal = new InheritableThreadLocal<>();
+    private static final ThreadLocal<KanalarzContext>
+        kanalarzContextThreadLocal = new InheritableThreadLocal<>();
 
     @Nullable
     public static KanalarzContext context() {
@@ -101,8 +110,12 @@ public class Kanalarz {
         @Nullable UUID parentStepId,
         KanalarzContext context
     ) {
-        if (!cancellableContexts.contains(context.getId())) {
-            throw new KanalarzException.KanalarzContextCancelledException();
+        switch (cancellableContexts.get(context.getId())) {
+            case CANCELLED ->
+                throw new KanalarzException.KanalarzContextCancelledException(false);
+            case CANCELLED_FORCE_DEFER_ROLLBACK ->
+                throw new KanalarzException.KanalarzContextCancelledException(true);
+            default -> {}
         }
 
         var stepInfo = stepsRegistry.getStepInfoOrThrow(stepsHolder, step);
@@ -278,6 +291,16 @@ public class Kanalarz {
                     performRollback(
                         autoCloseableContext.context(),
                         e.getInitialStepFailedException(),
+                        options,
+                        null
+                    );
+                }
+                throw e;
+            } catch (KanalarzException.KanalarzContextCancelledException e) {
+                if (!options.contains(Option.DEFER_ROLLBACK) && !e.forceDeferRollback()) {
+                    performRollback(
+                        autoCloseableContext.context(),
+                        e,
                         options,
                         null
                     );
@@ -560,6 +583,30 @@ public class Kanalarz {
         }
     }
 
+    public boolean cancelContext(UUID contextId) {
+        return cancelContext(contextId, CancellableContextState.CANCELLED);
+    }
+
+    public boolean cancelContextForceDeferRollback(UUID contextId) {
+        return cancelContext(contextId, CancellableContextState.CANCELLED_FORCE_DEFER_ROLLBACK);
+    }
+
+    private boolean cancelContext(UUID contextId, CancellableContextState newState) {
+        if (newState == CancellableContextState.CANCELLABLE) {
+            throw new IllegalArgumentException("Can't uncancel a context");
+        }
+        cancellableContexts.compute(contextId, (id, state) ->
+            switch (state) {
+                case CANCELLABLE -> newState;
+                case null -> throw new IllegalStateException(
+                    "Context [%s] is not currently running.".formatted(id));
+                default -> throw new IllegalStateException(
+                    "Context [%s] has already been cancelled.".formatted(id));
+            }
+        );
+        return true;
+    }
+
     private class AutoCloseableContext implements AutoCloseable {
 
         private final KanalarzContext context;
@@ -572,7 +619,6 @@ public class Kanalarz {
             KanalarzStepReplayer stepReplayer
         ) {
             context = new KanalarzContext(
-                Kanalarz.this,
                 resumesContext,
                 options,
                 stepReplayer
@@ -581,7 +627,7 @@ public class Kanalarz {
             context.putAllMetadata(metadata);
             kanalarzContextThreadLocal.set(context);
             activeContexts.incrementAndGet();
-            cancellableContexts.add(newContextId);
+            cancellableContexts.put(newContextId, CancellableContextState.CANCELLABLE);
         }
 
         @NonNull

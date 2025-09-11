@@ -2,7 +2,6 @@ package com.gbujak.kanalarz;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Lazy;
 
 @Configuration
 public class KanalarzConfiguration {
@@ -15,16 +14,16 @@ public class KanalarzConfiguration {
     @Bean
     Kanalarz kanalarz(
         KanalarzStepsRegistry stepsRegistry,
-        @Lazy KanalarzSerialization serialization,
-        @Lazy KanalarzPersistence persistence
+        KanalarzSerialization serialization,
+        KanalarzPersistence persistence
     ) {
         return new Kanalarz(stepsRegistry, serialization, persistence);
     }
 
     @Bean
     KanalarzBeanPostProcessor kanalarzBeanPostProcessor(
-        @Lazy Kanalarz kanalarz,
-        @Lazy KanalarzStepsRegistry stepsRegistry
+        Kanalarz kanalarz,
+        KanalarzStepsRegistry stepsRegistry
     ) {
         return new KanalarzBeanPostProcessor(kanalarz, stepsRegistry);
     }

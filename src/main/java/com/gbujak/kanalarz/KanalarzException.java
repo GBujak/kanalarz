@@ -65,8 +65,16 @@ public sealed abstract class KanalarzException extends RuntimeException permits
     }
 
     public final static class KanalarzContextCancelledException extends KanalarzException {
-        KanalarzContextCancelledException() {
+
+        private final boolean forceDeferRollback;
+
+        public boolean forceDeferRollback() {
+            return this.forceDeferRollback;
+        }
+
+        KanalarzContextCancelledException(boolean forceDeferRollback) {
             super("Context was cancelled", null);
+            this.forceDeferRollback = forceDeferRollback;
         }
     }
 
