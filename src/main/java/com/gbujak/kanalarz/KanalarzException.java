@@ -1,5 +1,7 @@
 package com.gbujak.kanalarz;
 
+import java.util.Optional;
+
 public sealed abstract class KanalarzException extends RuntimeException permits
     KanalarzException.KanalarzStepFailedException,
     KanalarzException.KanalarzThrownOutsideOfStepException,
@@ -41,9 +43,10 @@ public sealed abstract class KanalarzException extends RuntimeException permits
         KanalarzRollbackStepFailedException(Throwable cause, Throwable rollbackCause) {
             super(
                 "Pipeline step failed with message ["
-                    + cause.getMessage() +
+                    + Optional.ofNullable(cause).map(Throwable::getMessage).orElse("n/a") +
                     "] and then the pipeline rollback failed: " +
-                    rollbackCause.getMessage(), rollbackCause
+                    Optional.ofNullable(rollbackCause).map(Throwable::getMessage).orElse("n/a"),
+                rollbackCause
             );
             initialStepFailedException = cause;
             rollbackStepFailedException = rollbackCause;
