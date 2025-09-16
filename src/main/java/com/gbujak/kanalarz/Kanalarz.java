@@ -123,8 +123,9 @@ public class Kanalarz {
         var stepIdentifier = KanalarzStepsRegistry.stepIdentifier(stepsHolder, step);
 
         var stepReplayer = context.stepReplayer();
+        var serializedParameters = serialization.serializeStepCalled(serializeParametersInfo, null);
+
         if (stepReplayer != null) {
-            var serializedParameters = serialization.serializeStepCalled(serializeParametersInfo, null);
             var foundStep = stepReplayer.findNextStep(stepIdentifier, serializedParameters);
 
             if (stepReplayer.isDone()) {
@@ -161,6 +162,7 @@ public class Kanalarz {
             context.fullMetadata(),
             stepIdentifier,
             stepInfo.description,
+            serializedParameters,
             step.fallible()
         ));
 
@@ -442,6 +444,12 @@ public class Kanalarz {
             }
 
             context.withStepId(stepStack -> {
+
+                var serializedParameters = serialization.serializeStepCalled(
+                    Utils.makeSerializeParametersInfo(parameters, rollback),
+                    null
+                );
+
                 persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
                     context.getId(),
                     stepStack.current(),
@@ -450,6 +458,7 @@ public class Kanalarz {
                     context.fullMetadata(),
                     KanalarzStepsRegistry.rollbackIdentifier(rollback.stepsHolder, rollback.rollback),
                     rollback.description,
+                    serializedParameters,
                     rollback.rollback.fallible()
                 ));
 

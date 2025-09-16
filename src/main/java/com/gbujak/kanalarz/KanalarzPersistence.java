@@ -18,6 +18,7 @@ public interface KanalarzPersistence {
         @NonNull Map<String, String> metadata,
         @NonNull String stepIdentifier,
         @Nullable String description,
+        @NonNull String serializedParameters,
         boolean isFallible
     ) {}
     void stepStarted(StepStartedEvent stepStartedEvent);
