@@ -95,10 +95,21 @@ class BasicTestsKotlin {
     private lateinit var testNameService: TestNameServiceKotlin
 
     @Autowired
-    private lateinit var persistence: KanalarzPersistence
+    private lateinit var persistence: KanalarzPersistence<Any>
 
     @BeforeEach
     fun beforeEach() {
+        persistence.stepCompleted(KanalarzPersistence.StepCompletedEvent(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            Optional.empty(),
+            Optional.empty(),
+            emptyMap(),
+            "test",
+            "test",
+            "siema",
+            false
+        ))
         testNameService.clear()
     }
 

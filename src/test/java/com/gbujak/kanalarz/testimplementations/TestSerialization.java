@@ -1,7 +1,6 @@
 package com.gbujak.kanalarz.testimplementations;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.gbujak.kanalarz.KanalarzSerialization;
@@ -10,93 +9,83 @@ import org.jetbrains.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Type;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Component
-public class TestSerialization implements KanalarzSerialization {
+public class TestSerialization implements KanalarzSerialization<TestSerializedStepInfo> {
 
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new Jdk8Module());
 
     @NotNull
     @Override
-    public String serializeStepCalled(
+    public TestSerializedStepInfo serializeStepCalled(
         @NotNull List<SerializeParameterInfo> parametersInfo,
         @Nullable SerializeReturnInfo returnInfo
     ) {
-        var serialized = mapper.createObjectNode();
-
-        var params = mapper.createArrayNode();
+        List<TestSerializedStepInfo.Param> params = new ArrayList<>();
         for (var parameter : parametersInfo) {
-            var paramNode = mapper.createObjectNode();
-            paramNode.put("name", parameter.name());
-            paramNode.set("value", mapper.valueToTree(parameter.value()));
-            paramNode.put("secret", parameter.secret());
-            paramNode.put("type", parameter.type().getTypeName());
-            params.add(paramNode);
+            try {
+                params.add(new TestSerializedStepInfo.Param(
+                    parameter.name(),
+                    parameter.type(),
+                    mapper.writeValueAsString(parameter.value()),
+                    parameter.secret()
+                ));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
         }
-        serialized.set("params", params);
+        var returnValue = Optional.ofNullable(returnInfo).map(it -> {
+            try {
+                return new TestSerializedStepInfo.ReturnValue(
+                    it.type(),
+                    mapper.writeValueAsString(it.value()),
+                    Optional.ofNullable(it.error()).map(Throwable::getMessage).orElse(null),
+                    it.secret()
+                );
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }).orElse(null);
 
-        if (returnInfo != null) {
-            var result = mapper.createObjectNode();
-            result.put("secret", returnInfo.secret());
-            result.put("type", returnInfo.type().getTypeName());
-            result.put("error", returnInfo.error() != null ? returnInfo.error().toString() : null);
-            result.set("value", mapper.valueToTree(returnInfo.value()));
-            serialized.set("returnInfo", result);
-        }
-
-        return serialized.toPrettyString();
+        return new TestSerializedStepInfo(params, returnValue);
     }
 
     @NotNull
     @Override
     public DeserializeParametersResult deserializeParameters(
-        @NotNull String serialized,
+        @NotNull TestSerializedStepInfo serialized,
         @NotNull List<DeserializeParameterInfo> parametersInfo,
         @NotNull Type returnType
     ) {
-        JsonNode tree;
-        try {
-            tree = mapper.readTree(serialized);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
         Map<String, Object> parameters = new HashMap<>(parametersInfo.size());
+        Object result = null;
 
-        Object result;
         try {
-            result = mapper.readValue(
-                tree.get("returnInfo").get("value").toString(),
-                mapper.getTypeFactory().constructType(returnType)
-            );
+            if (serialized.returnValue().serialized() != null) {
+                result = mapper.readValue(
+                    serialized.returnValue().serialized(),
+                    mapper.getTypeFactory().constructType(returnType)
+                );
+            }
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
 
-        var error = tree.get("returnInfo").get("error").textValue();
+        var error = serialized.returnValue().errorMessage();
 
-        var treeParams = tree.get("params");
-        paramLoop: for (var param : parametersInfo) {
-            for (var treeParamNode : treeParams) {
-                if (treeParamNode.get("name").asText().equals(param.name())) {
-                    try {
-                        var paramValue = mapper.readValue(
-                            treeParamNode.get("value").toString(),
-                            mapper.getTypeFactory().constructType(param.type())
-                        );
-                        parameters.put(param.name(), paramValue);
-                        break paramLoop;
-                    } catch (JsonProcessingException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
+        for (var param : serialized.params()) {
+            try {
+                parameters.put(
+                    param.name(),
+                    mapper.readValue(
+                        param.serialized(),
+                        mapper.getTypeFactory().constructType(param.type())
+                    )
+                );
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException(e);
             }
-            throw new RuntimeException(
-                "could not find value for param %s in %s"
-                    .formatted(param.name(), treeParams.toString())
-            );
         }
 
         return new DeserializeParametersResult(
@@ -107,12 +96,17 @@ public class TestSerialization implements KanalarzSerialization {
     }
 
     @Override
-    public boolean parametersAreEqualIgnoringReturn(String left, String right) {
-        try {
-            return mapper.readTree(left).get("params")
-                .equals(mapper.readTree(right).get("params"));
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
+    public boolean parametersAreEqualIgnoringReturn(
+        TestSerializedStepInfo left,
+        TestSerializedStepInfo right
+    ) {
+        return left.params().stream()
+            .sorted(Comparator.comparing(TestSerializedStepInfo.Param::name))
+            .toList()
+            .equals(
+                right.params().stream()
+                    .sorted(Comparator.comparing(TestSerializedStepInfo.Param::name))
+                    .toList()
+            );
     }
 }

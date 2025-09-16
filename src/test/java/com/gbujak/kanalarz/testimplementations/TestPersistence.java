@@ -12,12 +12,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Component
-public class TestPersistence implements KanalarzPersistence {
+public class TestPersistence implements KanalarzPersistence<TestSerializedStepInfo> {
 
     private static final Logger log = LoggerFactory.getLogger(TestPersistence.class);
 
     public List<StepStartedEvent> stepStartedEvents = Collections.synchronizedList(new ArrayList<>());
-    public List<StepCompletedEvent> stepCompletedEvents = Collections.synchronizedList(new ArrayList<>());
+    public List<StepCompletedEvent<TestSerializedStepInfo>> stepCompletedEvents = Collections.synchronizedList(new ArrayList<>());
 
     @Override
     public void stepStarted(StepStartedEvent stepStartedEvent) {
@@ -26,17 +26,17 @@ public class TestPersistence implements KanalarzPersistence {
     }
 
     @Override
-    public void stepCompleted(StepCompletedEvent stepCompletedEvent) {
+    public void stepCompleted(StepCompletedEvent<TestSerializedStepInfo> stepCompletedEvent) {
         stepCompletedEvents.add(stepCompletedEvent);
         log.info("Received step completed event: {}", stepCompletedEvent.toString());
     }
 
     @NotNull
     @Override
-    public List<StepExecutedInfo> getExecutedStepsInContextInOrderOfExecution(@NotNull UUID contextId) {
+    public List<StepExecutedInfo<TestSerializedStepInfo>> getExecutedStepsInContextInOrderOfExecution(@NotNull UUID contextId) {
         return stepCompletedEvents.stream()
             .filter(it -> it.contextId().equals(contextId))
-            .map(it -> new StepExecutedInfo(
+            .map(it -> new StepExecutedInfo<>(
                 it.stepId(),
                 it.stepIdentifier(),
                 it.serializedExecutionResult(),

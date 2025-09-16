@@ -62,7 +62,7 @@ class ResumeReplayTestSteps {
 public class ResumeReplayTests {
 
     @Autowired private Kanalarz kanalarz;
-    @Autowired private KanalarzPersistence persistence;
+    @Autowired private KanalarzPersistence<Object> persistence;
     @Autowired private ResumeReplayTestService service;
     @Autowired private ResumeReplayTestSteps steps;
 

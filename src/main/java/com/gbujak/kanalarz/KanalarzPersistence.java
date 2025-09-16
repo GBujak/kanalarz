@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface KanalarzPersistence {
+public interface KanalarzPersistence<T> {
 
     record StepStartedEvent(
         @NonNull UUID contextId,
@@ -22,7 +22,7 @@ public interface KanalarzPersistence {
     ) {}
     void stepStarted(StepStartedEvent stepStartedEvent);
 
-    record StepCompletedEvent(
+    record StepCompletedEvent<T>(
         @NonNull UUID contextId,
         @NonNull UUID stepId,
         @NonNull Optional<UUID> parentStepId,
@@ -30,19 +30,19 @@ public interface KanalarzPersistence {
         @NonNull Map<String, String> metadata,
         @NonNull String stepIdentifier,
         @Nullable String description,
-        @NonNull String serializedExecutionResult,
+        @NonNull T serializedExecutionResult,
         boolean failed
     ) {}
-    void stepCompleted(StepCompletedEvent stepCompletedEvent);
+    void stepCompleted(StepCompletedEvent<T> stepCompletedEvent);
 
-    record StepExecutedInfo(
+    record StepExecutedInfo<T>(
         @NonNull UUID stepId,
         @NonNull String stepIdentifier,
-        @NonNull String serializedExecutionResult,
+        @NonNull T serializedExecutionResult,
         @NonNull Optional<UUID> parentStepId,
         @NonNull Optional<UUID> wasRollbackFor,
         boolean failed
     ) {}
     @NonNull
-    List<StepExecutedInfo> getExecutedStepsInContextInOrderOfExecution(@NonNull UUID contextId);
+    List<StepExecutedInfo<T>> getExecutedStepsInContextInOrderOfExecution(@NonNull UUID contextId);
 }

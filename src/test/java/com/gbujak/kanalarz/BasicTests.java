@@ -90,7 +90,7 @@ public class BasicTests {
     @Autowired private Kanalarz kanalarz;
     @Autowired private TestSteps testSteps;
     @Autowired private TestNameService testNameService;
-    @Autowired private KanalarzPersistence persistence;
+    @Autowired private KanalarzPersistence<Object> persistence;
 
     @BeforeEach
     void beforeEach() {

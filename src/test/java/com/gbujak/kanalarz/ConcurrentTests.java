@@ -97,7 +97,7 @@ public class ConcurrentTests {
     @Autowired private Kanalarz kanalarz;
     @Autowired private ConcurrentTestSteps steps;
     @Autowired private ConcurrentTestService service;
-    @Autowired private KanalarzPersistence persistence;
+    @Autowired private KanalarzPersistence<Object> persistence;
 
     @BeforeEach
     void beforeEach() {

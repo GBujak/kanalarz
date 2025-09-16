@@ -7,16 +7,16 @@ sealed interface KanalarzStepReplayer {
 
     final class KanalarzInOrderStepReplayer implements KanalarzStepReplayer {
 
-        private final KanalarzSerialization serialization;
+        private final KanalarzSerialization<Object> serialization;
         private final KanalarzStepsRegistry stepsRegistry;
-        private final List<KanalarzPersistence.StepExecutedInfo> stepsToReplay;
+        private final List<KanalarzPersistence.StepExecutedInfo<Object>> stepsToReplay;
         private int currentStep = 0;
         private final ReentrantLock lock = new ReentrantLock();
 
         KanalarzInOrderStepReplayer(
-            KanalarzSerialization serialization,
+            KanalarzSerialization<Object> serialization,
             KanalarzStepsRegistry stepsRegistry,
-            List<KanalarzPersistence.StepExecutedInfo> stepsExecuted
+            List<KanalarzPersistence.StepExecutedInfo<Object>> stepsExecuted
         ) {
             this.serialization = serialization;
             this.stepsRegistry = stepsRegistry;
@@ -24,7 +24,7 @@ sealed interface KanalarzStepReplayer {
         }
 
         @Override
-        public SearchResult findNextStep(String stepIdentifier, String serializedParametersInfo) {
+        public SearchResult findNextStep(String stepIdentifier, Object serializedParametersInfo) {
             try {
                 lock.lock();
 
@@ -75,7 +75,7 @@ sealed interface KanalarzStepReplayer {
         }
 
         @Override
-        public List<KanalarzPersistence.StepExecutedInfo> unreplayed() {
+        public List<KanalarzPersistence.StepExecutedInfo<Object>> unreplayed() {
             try {
                 lock.lock();
                 return stepsToReplay.stream().skip(currentStep).toList();
@@ -87,18 +87,18 @@ sealed interface KanalarzStepReplayer {
 
     final class KanalarzOutOfOrderStepReplayer implements KanalarzStepReplayer {
 
-        private final KanalarzSerialization serialization;
+        private final KanalarzSerialization<Object> serialization;
         private final KanalarzStepsRegistry stepsRegistry;
-        private final List<KanalarzPersistence.StepExecutedInfo> stepsToReplay;
+        private final List<KanalarzPersistence.StepExecutedInfo<Object>> stepsToReplay;
         private final ReentrantLock lock = new ReentrantLock();
 
         private final boolean[] stepsReplayed;
         private int firstUnreplayedIndex = 0;
 
         KanalarzOutOfOrderStepReplayer(
-            KanalarzSerialization serialization,
+            KanalarzSerialization<Object> serialization,
             KanalarzStepsRegistry stepsRegistry,
-            List<KanalarzPersistence.StepExecutedInfo> stepsExecuted
+            List<KanalarzPersistence.StepExecutedInfo<Object>> stepsExecuted
         ) {
             this.serialization = serialization;
             this.stepsRegistry = stepsRegistry;
@@ -107,7 +107,7 @@ sealed interface KanalarzStepReplayer {
         }
 
         @Override
-        public SearchResult findNextStep(String stepIdentifier, String serializedParametersInfo) {
+        public SearchResult findNextStep(String stepIdentifier, Object serializedParametersInfo) {
             try {
                 lock.lock();
 
@@ -173,10 +173,10 @@ sealed interface KanalarzStepReplayer {
         }
 
         @Override
-        public List<KanalarzPersistence.StepExecutedInfo> unreplayed() {
+        public List<KanalarzPersistence.StepExecutedInfo<Object>> unreplayed() {
             try {
                 lock.lock();
-                List<KanalarzPersistence.StepExecutedInfo> result = new ArrayList<>();
+                List<KanalarzPersistence.StepExecutedInfo<Object>> result = new ArrayList<>();
                 for (int i = firstUnreplayedIndex; i < stepsToReplay.size(); i++) {
                     if (stepsReplayed[i]) {
                         result.add(stepsToReplay.get(i));
@@ -189,13 +189,13 @@ sealed interface KanalarzStepReplayer {
         }
     }
 
-    SearchResult findNextStep(String stepIdentifier, String serializedParametersInfo);
+    SearchResult findNextStep(String stepIdentifier, Object serializedParametersInfo);
     boolean isDone();
-    List<KanalarzPersistence.StepExecutedInfo> unreplayed();
+    List<KanalarzPersistence.StepExecutedInfo<Object>> unreplayed();
 
-    static private List<KanalarzPersistence.StepExecutedInfo>
-    buildStepsToReplay(List<KanalarzPersistence.StepExecutedInfo> stepsExecuted) {
-        List<KanalarzPersistence.StepExecutedInfo> result = new ArrayList<>();
+    static private List<KanalarzPersistence.StepExecutedInfo<Object>>
+    buildStepsToReplay(List<KanalarzPersistence.StepExecutedInfo<Object>> stepsExecuted) {
+        List<KanalarzPersistence.StepExecutedInfo<Object>> result = new ArrayList<>();
         HashSet<UUID> parentsProcessed = new HashSet<>();
 
         stepLoop: for (int i = 0; i < stepsExecuted.size(); i++) {

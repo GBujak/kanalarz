@@ -28,17 +28,17 @@ public class Kanalarz {
     }
 
     private final KanalarzStepsRegistry stepsRegistry;
-    private final KanalarzSerialization serialization;
-    private final KanalarzPersistence persistance;
+    private final KanalarzSerialization<Object> serialization;
+    private final KanalarzPersistence<Object> persistence;
 
     Kanalarz(
         KanalarzStepsRegistry stepsRegistry,
-        KanalarzSerialization serialization,
-        KanalarzPersistence persistance
+        KanalarzSerialization<Object> serialization,
+        KanalarzPersistence<Object> persistence
     ) {
         this.stepsRegistry = stepsRegistry;
         this.serialization = serialization;
-        this.persistance = persistance;
+        this.persistence = persistence;
     }
 
     private static final AtomicInteger activeContexts = new AtomicInteger();
@@ -153,7 +153,7 @@ public class Kanalarz {
             }
         }
 
-        persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
+        persistence.stepStarted(new KanalarzPersistence.StepStartedEvent(
             context.getId(),
             stepId,
             Optional.ofNullable(parentStepId),
@@ -167,7 +167,7 @@ public class Kanalarz {
         Object result = null;
         Throwable error = null;
         boolean unwrappedStepOut = false;
-        String resultSerialized;
+        Object resultSerialized;
         try {
             result = method.invoke(target, arguments);
             if (step.fallible() && result == null) {
@@ -209,7 +209,7 @@ public class Kanalarz {
         }
 
         var failed = error != null;
-        persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
+        persistence.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
             context.getId(),
             stepId,
             Optional.ofNullable(parentStepId),
@@ -328,7 +328,7 @@ public class Kanalarz {
             );
         }
 
-        var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(resumesContext);
+        var executedSteps = persistence.getExecutedStepsInContextInOrderOfExecution(resumesContext);
 
         if (options.contains(Option.OUT_OF_ORDER_REPLAY)) {
             return new KanalarzStepReplayer.KanalarzOutOfOrderStepReplayer(serialization, stepsRegistry, executedSteps);
@@ -353,7 +353,7 @@ public class Kanalarz {
         EnumSet<Option> options,
         @Nullable Set<UUID> specificStepsToRollbackOnly
     ) {
-        var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(context.getId());
+        var executedSteps = persistence.getExecutedStepsInContextInOrderOfExecution(context.getId());
         var executedRollbacks =
             executedSteps.stream()
                 .filter(it -> it.wasRollbackFor().isPresent())
@@ -442,7 +442,7 @@ public class Kanalarz {
             }
 
             context.withStepId(stepStack -> {
-                persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
+                persistence.stepStarted(new KanalarzPersistence.StepStartedEvent(
                     context.getId(),
                     stepStack.current(),
                     Optional.empty(),
@@ -474,7 +474,7 @@ public class Kanalarz {
                 );
 
                 boolean failed = error != null;
-                persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
+                persistence.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
                     context.getId(),
                     stepStack.current(),
                     Optional.empty(),

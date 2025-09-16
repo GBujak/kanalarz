@@ -113,7 +113,7 @@ class TestNestedSteps {
 @SpringBootTest
 public class NestedStepsTests {
     @Autowired private Kanalarz kanalarz;
-    @Autowired private KanalarzPersistence persistence;
+    @Autowired private KanalarzPersistence<Object> persistence;
     @Autowired private TestNestedStepsService service;
     @Autowired private TestNestedSteps steps;
 

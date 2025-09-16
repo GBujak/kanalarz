@@ -7,7 +7,7 @@ import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
 
-public interface KanalarzSerialization {
+public interface KanalarzSerialization<T> {
 
     record SerializeParameterInfo(
         @NonNull String name,
@@ -22,7 +22,7 @@ public interface KanalarzSerialization {
         boolean secret
     ) {}
     @NonNull
-    String serializeStepCalled(
+    T serializeStepCalled(
         @NonNull List<SerializeParameterInfo> parametersInfo,
         @Nullable SerializeReturnInfo returnInfo
     );
@@ -38,10 +38,10 @@ public interface KanalarzSerialization {
     ) {}
     @NonNull
     DeserializeParametersResult deserializeParameters(
-        @NonNull String serialized,
+        @NonNull T serialized,
         @NonNull List<DeserializeParameterInfo> parametersInfo,
         @NonNull Type returnType
     );
 
-    boolean parametersAreEqualIgnoringReturn(String left, String right);
+    boolean parametersAreEqualIgnoringReturn(T left, T right);
 }

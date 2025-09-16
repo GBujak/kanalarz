@@ -63,7 +63,7 @@ public class CancellingTests {
     @Autowired private CancellingTestsService service;
     @Autowired private CancellingTestsSteps steps;
     @Autowired private Kanalarz kanalarz;
-    @Autowired private KanalarzPersistence persistence;
+    @Autowired private KanalarzPersistence<Object> persistence;
 
     @BeforeEach
     void beforeEach() {
