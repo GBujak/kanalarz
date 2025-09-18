@@ -66,11 +66,13 @@ internal open class TestStepsKotlin {
 
     @NonNull
     @Step(identifier = "set-name-fallible", fallible = true)
+    @StepDescription("test test {{namee}}, {name}, {name}, {name}, {name}")
     open fun setNameFallible(name: String?): StepOut<Optional<String>> {
         return StepOut.ofNullable(testNameService.set(name))
     }
 
     @Rollback(forStep = "set-name-fallible", fallible = true)
+    @StepDescription("test test {{namee}}, {name}, {oldName}")
     open fun setNameFallibleRollback(
         @NonNull @RollforwardOut oldName: Optional<String>,
         @Arg("name") newName: String?

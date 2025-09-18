@@ -362,8 +362,8 @@ public class Kanalarz {
                 .collect(
                     Collectors.toMap(
                         it -> it.wasRollbackFor().get(),
-                        KanalarzPersistence.StepExecutedInfo::failed,
-                        (leftFailed, rightFailed) -> leftFailed && rightFailed
+                        it -> (Boolean) it.failed(),
+                        (leftFailed, rightFailed) -> (Boolean) (leftFailed && rightFailed)
                     ));
         var stepsToRollback =
             executedSteps.reversed().stream()
@@ -592,15 +592,15 @@ public class Kanalarz {
         }
     }
 
-    public boolean cancelContext(UUID contextId) {
-        return cancelContext(contextId, CancellableContextState.CANCELLED);
+    public void cancelContext(UUID contextId) {
+        cancelContext(contextId, CancellableContextState.CANCELLED);
     }
 
-    public boolean cancelContextForceDeferRollback(UUID contextId) {
-        return cancelContext(contextId, CancellableContextState.CANCELLED_FORCE_DEFER_ROLLBACK);
+    public void cancelContextForceDeferRollback(UUID contextId) {
+        cancelContext(contextId, CancellableContextState.CANCELLED_FORCE_DEFER_ROLLBACK);
     }
 
-    private boolean cancelContext(UUID contextId, CancellableContextState newState) {
+    private void cancelContext(UUID contextId, CancellableContextState newState) {
         if (newState == CancellableContextState.CANCELLABLE) {
             throw new IllegalArgumentException("Can't uncancel a context");
         }
@@ -613,7 +613,6 @@ public class Kanalarz {
                     "Context [%s] has already been cancelled.".formatted(id));
             }
         );
-        return true;
     }
 
     private class AutoCloseableContext implements AutoCloseable {

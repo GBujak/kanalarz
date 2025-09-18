@@ -17,7 +17,7 @@ public interface KanalarzPersistence {
         @NonNull Optional<UUID> stepIsRollbackFor,
         @NonNull Map<String, String> metadata,
         @NonNull String stepIdentifier,
-        @Nullable String description,
+        @Nullable ParameterizedStepDescription description,
         @NonNull String serializedParameters,
         boolean isFallible
     ) {}
@@ -30,7 +30,7 @@ public interface KanalarzPersistence {
         @NonNull Optional<UUID> stepIsRollbackFor,
         @NonNull Map<String, String> metadata,
         @NonNull String stepIdentifier,
-        @Nullable String description,
+        @Nullable ParameterizedStepDescription description,
         @NonNull String serializedExecutionResult,
         boolean failed
     ) {}

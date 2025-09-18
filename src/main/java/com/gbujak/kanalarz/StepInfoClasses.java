@@ -17,7 +17,7 @@ class StepInfoClasses {
         Object target;
         @Nullable Step step;
         @Nullable Rollback rollback;
-        @Nullable String description;
+        @Nullable ParameterizedStepDescription description;
         StepsHolder stepsHolder;
         Type returnType;
         boolean isReturnTypeNonNullable;
@@ -64,6 +64,7 @@ class StepInfoClasses {
             stepInfo.description =
                 Optional.ofNullable(method.getAnnotation(StepDescription.class))
                     .map(StepDescription::value)
+                    .map(ParameterizedStepDescription::parse)
                     .orElse(null);
             stepInfo.returnType = method.getGenericReturnType();
             stepInfo.isReturnTypeNonNullable = Utils.isReturnTypeNonNullable(method);

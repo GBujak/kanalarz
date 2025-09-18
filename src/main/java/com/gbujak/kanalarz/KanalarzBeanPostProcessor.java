@@ -83,7 +83,7 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
         ReflectionUtils.doWithMethods(target.getClass(), methods::add);
 
         // sort so rollbacks are at the back so it's easier to register them in the KanalarzContext class
-        methods.sort(Comparator.comparing(it -> it.isAnnotationPresent(Rollback.class)));
+        methods.sort(Comparator.comparing(it -> (Boolean) it.isAnnotationPresent(Rollback.class)));
         
         for (var method : methods) {
             var step = method.getAnnotation(Step.class);

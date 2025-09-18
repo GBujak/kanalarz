@@ -9,6 +9,7 @@ import org.springframework.lang.NonNull;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 class KanalarzStepsRegistry {
@@ -24,17 +25,21 @@ class KanalarzStepsRegistry {
         Step step,
         boolean returnIsSecret
     ) {
-        String stepIdentifier = stepIdentifier(stepsHolder, step);
+        var stepIdentifier = stepIdentifier(stepsHolder, step);
         if (this.steps.containsKey(stepIdentifier)) {
             throw new RuntimeException("Duplicated step identifier %s".formatted(stepIdentifier));
         }
+
         var stepInfo = StepInfoClasses.StepInfo.createNew(target, method, stepsHolder, step, returnIsSecret);
+        validateDescription(stepInfo);
+
         if (step.fallible() && !StepOut.isTypeStepOut(stepInfo.returnType)) {
             throw new RuntimeException(
                 "Fallible steps must return a [%s] instance so the error can be wrapped and returned."
                     .formatted(StepOut.class.getCanonicalName())
             );
         }
+
         if (step.fallible() && !stepInfo.isReturnTypeNonNullable) {
             throw new RuntimeException(
                 "Fallible steps must be non-nullable. They return a StepOut object which is comparable to java's " +
@@ -67,6 +72,7 @@ class KanalarzStepsRegistry {
         }
 
         var stepInfo = StepInfoClasses.StepInfo.createNew(target, method, stepsHolder, rollback, returnIsSecret);
+        validateDescription(stepInfo);
 
         for (var param : stepInfo.paramsInfo) {
             if (param.isRollforwardOutput) {
@@ -141,6 +147,26 @@ class KanalarzStepsRegistry {
 
         steps.put(rollbackIdentifier, stepInfo);
         rollbackStepsForRollforwardSteps.put(stepIdentifier, rollbackIdentifier);
+    }
+
+    private void validateDescription(StepInfoClasses.StepInfo stepInfo) {
+        var description = stepInfo.description;
+        if (description == null) {
+            return;
+        }
+
+        descParam: for (var descParameter : description.parameters()) {
+            for (var parameter: stepInfo.paramsInfo) {
+                if (Objects.equals(parameter.paramName, descParameter)) {
+                    continue descParam;
+                }
+            }
+
+            throw new RuntimeException(
+                "Description parameter [%s] has no corresponding step parameter: %s"
+                    .formatted(descParameter, stepInfo.paramsInfo.stream().map(it -> it.paramName).toList())
+            );
+        }
     }
 
     @NonNull
