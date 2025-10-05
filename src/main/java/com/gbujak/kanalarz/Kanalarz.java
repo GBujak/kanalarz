@@ -16,6 +16,9 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * Entrypoint of the Kanalarz pipeline library
+ */
 public class Kanalarz {
 
     private final ConcurrentHashMap<UUID, CancellableContextState>
@@ -45,16 +48,29 @@ public class Kanalarz {
     private static final ThreadLocal<KanalarzContext>
         kanalarzContextThreadLocal = new InheritableThreadLocal<>();
 
+    /**
+     * Get current pipeline context
+     * @return current pipeline context or null if not in a pipeline context
+     */
     @Nullable
     public static KanalarzContext context() {
         return kanalarzContextThreadLocal.get();
     }
 
+    /**
+     * Get current pipeline context
+     * @return current pipeline context or empty Optional if not in a context
+     */
     @NonNull
     public static Optional<KanalarzContext> contextOpt() {
         return Optional.ofNullable(kanalarzContextThreadLocal.get());
     }
 
+    /**
+     * Get current pipeline context
+     * @return current pipeline context
+     * @throws IllegalStateException if not in a pipeline context
+     */
     @NonNull
     public static KanalarzContext contextOrThrow() {
         return contextOpt()
@@ -237,6 +253,10 @@ public class Kanalarz {
         }
     }
 
+    /**
+     * Create a new pipeline context builder
+     * @return new context builder
+     */
     @NonNull
     public KanalarzContextBuilder newContext() {
         return new KanalarzContextBuilder();
@@ -504,23 +524,43 @@ public class Kanalarz {
         }
     }
 
+    /**
+     * Kanalarz pipeline context builder
+     */
     public class KanalarzContextBuilder {
 
         @Nullable private UUID resumeContext;
         @NonNull private final Map<String, String> metadata = new HashMap<>();
         private final EnumSet<Option> options = EnumSet.noneOf(Option.class);
 
+        /**
+         * Sets the new context ID. This can be a context that ran in the past, or it can be a freshly generated id.
+         * If not provided the library will generate a new UUID.
+         * @param resumes the ID to use
+         * @return this to continue building
+         */
         @NonNull
         public KanalarzContextBuilder resumes(@Nullable UUID resumes) {
             this.resumeContext = resumes;
             return this;
         }
 
+        /**
+         * Enable a pipeline option
+         * @param option option to enable
+         * @return this to continue building
+         */
         @NonNull
         public KanalarzContextBuilder option(Option option) {
             return option(option, true);
         }
 
+        /**
+         * Set pipeline option enablement
+         * @param option option to enable
+         * @param enable whether the option should be enabled
+         * @return this to continue building
+         */
         @NonNull
         public KanalarzContextBuilder option(Option option, boolean enable) {
             if (enable) {
@@ -540,22 +580,74 @@ public class Kanalarz {
             return this;
         }
 
+        /**
+         * Add a metadata field to the metadata map. The metadata
+         * is accessible through the pipeline context and is passed to
+         * the pipeline library adapters with every step started / completed event.
+         * @param key key of the metadata
+         * @param value value of the metadata
+         * @return this to continue building
+         */
         @NonNull
         public KanalarzContextBuilder metadata(@NonNull String key, @NonNull String value) {
             metadata.put(key, value);
             return this;
         }
 
+        /**
+         * Begin execution of the pipeline context
+         * @param block {@link Function} containing the pipeline body
+         * @return the return of the block parameter
+         * @param <T> return type of block
+         */
         public <T> T start(Function<KanalarzContext, T> block) {
             validateDependantOptions();
             return inContext(metadata, resumeContext, block, options, false);
         }
 
+        /**
+         * Begin execution of the pipeline context in resume replay mode. This mode is only intended
+         * for pipelines that already ran with the ID set using the `resumes` method.
+         * The body of the pipeline is executed normally, but, if some step was executed previously with the same
+         * arguments, the value from the previous execution is returned and the step is not executed.
+         * When every step has been replayed, the resume-replay context is dropped and the pipeline behaves like
+         * a standard pipeline.
+         * <br>
+         * <b>MAKE SURE NO SIDE EFFECTS HAPPEN OUTSIDE OF STEPS OR THEY WILL BE EXECUTED AGAIN</b>
+         * <br>
+         * The behavior of the resume-replay can be controlled by enabling the various options
+         * using this builder before starting the pipeline:
+         * <ul>
+         *     <li>OUT_OF_ORDER_REPLAY - steps can be replayed in a different order than initially executed</li>
+         *     <li>
+         *         NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED - new steps can execute
+         *         before all the previous steps were replayed (requires OUT_OF_ORDER_REPLAY to be enabled)
+         *     </li>
+         *     <li>
+         *         IGNORE_NOT_REPLAYED_STEPS - steps that weren't replayed after the pipeline finished are ignored
+         *         (by default the pipeline would fail and a normal rollback would be
+         *         triggered unless DEFER_ROLLBACK was enabled)
+         *     </li>
+         *     <li>
+         *         ROLLBACK_ONLY_NOT_REPLAYED_STEPS - steps that weren't replayed after the pipeline finished
+         *         will be rolled back but the pipeline will not fail (by default the pipeline would fail and everything
+         *         would be rolled back unless DEFER_ROLLBACK was enabled)
+         *     </li>
+         * </ul>
+         * @param block {@link Function} containing the pipeline body
+         * @param <T> return type of block
+         * @return the return of the block parameter
+         */
         public <T> T startResumeReplay(Function<KanalarzContext, T> block) {
             validateDependantOptions();
             return inContext(metadata, resumeContext, block, options, true);
         }
 
+        /**
+         * Util method that takes a consumer instead of a function.
+         * Does the same thing as the start method but doesn't return anything.
+         * @param block body of the pipeline
+         */
         public void consume(Consumer<KanalarzContext> block) {
             start(ctx -> {
                 block.accept(ctx);
@@ -563,6 +655,11 @@ public class Kanalarz {
             });
         }
 
+        /**
+         * Util method that takes a consumer instead of a function.
+         * Does the same thing as the resumeReplay method but doesn't return anything.
+         * @param block body of the pipeline
+         */
         public void consumeResumeReplay(Consumer<KanalarzContext> block) {
             startResumeReplay(ctx -> {
                 block.accept(ctx);
@@ -570,6 +667,13 @@ public class Kanalarz {
             });
         }
 
+        /**
+         * Function that triggers an immediate rollback of the resumed context. To be used by pipelines that failed
+         * with the DEFER_ROLLBACK option enabled to trigger a rollback. The rollback will be exactly as if the
+         * DEFER_ROLLBACK option wasn't enabled and the pipeline failed. Can also be used with a pipeline that
+         * succeeded.
+         * @throws IllegalStateException if called without resuming a context
+         */
         public void rollbackNow() {
             validateDependantOptions();
             if (resumeContext == null) {
@@ -592,15 +696,40 @@ public class Kanalarz {
         }
     }
 
-    public void cancelContext(UUID contextId) {
+    /**
+     * Get running contexts globally.
+     * @return unmodifiable set of running contexts
+     */
+    @NonNull
+    public Set<UUID> runningContexts() {
+        return Collections.unmodifiableSet(cancellableContexts.keySet());
+    }
+
+    /**
+     * Cancels the context. A {@link KanalarzException.KanalarzContextCancelledException} exception will be thrown
+     * the next time a step is attempted to be executed within this context and on every following attempt.
+     * A step started event will not be produced.
+     * @param contextId context id to cancel
+     * @throws IllegalStateException if the context has already been cancelled or is not running
+     */
+    public void cancelContext(@NonNull UUID contextId) {
+        Objects.requireNonNull(contextId);
         cancelContext(contextId, CancellableContextState.CANCELLED);
     }
 
-    public void cancelContextForceDeferRollback(UUID contextId) {
+    /**
+     * Cancels the context. A {@link KanalarzException.KanalarzContextCancelledException} exception will be thrown
+     * the next time a step is attempted to be executed within this context and on every following attempt.
+     * A step started event will not be produced. A rollback will not be triggered.
+     * @param contextId context id to cancel
+     * @throws IllegalStateException if the context has already been cancelled or is not running
+     */
+    public void cancelContextForceDeferRollback(@NonNull UUID contextId) {
+        Objects.requireNonNull(contextId);
         cancelContext(contextId, CancellableContextState.CANCELLED_FORCE_DEFER_ROLLBACK);
     }
 
-    private void cancelContext(UUID contextId, CancellableContextState newState) {
+    private void cancelContext(@NonNull UUID contextId, @NonNull CancellableContextState newState) {
         if (newState == CancellableContextState.CANCELLABLE) {
             throw new IllegalArgumentException("Can't uncancel a context");
         }
@@ -653,14 +782,93 @@ public class Kanalarz {
         }
     }
 
+    /**
+     * Options used to configure the pipeline execution
+     */
     public enum Option {
+        /**
+         * Rollback steps will not be executed even if the pipeline fails (an exception is thrown out of the
+         * pipeline context body). The rollback steps can be executed using the rollbackNow method of the pipeline
+         * context builder
+         */
         DEFER_ROLLBACK,
+
+        /**
+         * Pipeline will behave as if every rollback step was marked with fallible = true.
+         * Failed steps will not trigger a failure of the rollback. They will be ignored and the pipeline
+         * will continue the rollback. The recommended way to handle rollback failures is to let the rollback fail,
+         * resolve the issue which caused it and try to rollback again using the rollbackNow method of the pipeline
+         * context builder.
+         */
         ALL_ROLLBACK_STEPS_FALLIBLE,
+
+        /**
+         * If any of the steps failed to rollback previously they will be ignored and skipped over
+         * during the rollback. It's recommended to use the RETRY_FAILED_ROLLBACKS option instead.
+         * By default, the rollback will fail if it encounters any steps that tried but failed to rollback
+         * in a previous attempt.
+         * This option is incompatible with RETRY_FAILED_ROLLBACKS.
+         */
         SKIP_FAILED_ROLLBACKS,
+
+        /**
+         * If any of the steps failed to rollback previously, the pipeline will try to roll them back again
+         * during the rollback.
+         * By default, the rollback will fail if it encounters any steps that tried but failed to rollback
+         * in a previous attempt.
+         * This option is incompatible with SKIP_FAILED_ROLLBACKS.
+         */
         RETRY_FAILED_ROLLBACKS,
+
+        /**
+         * Allows the steps to be replayed in a different order than in the original run of the pipeline. This
+         * is not recommended when it can be avoided, because it prevents the pipeline from failing fast if the
+         * steps are being replayed out of order. Instead, the pipeline will have to finish and then fail if any
+         * non-replayed steps are left unless the IGNORE_NOT_REPLAYED_STEPS or ROLLBACK_ONLY_NOT_REPLAYED_STEPS
+         * options are enabled.
+         * <br>
+         * This option is necessary if the pipeline has concurrency or executes the steps in a non-deterministic
+         * order for some other reason. <b>This option is not necessary when using nested steps. They are handled
+         * in a different way that doesn't require this option to be enabled.</b>
+         * <br>
+         * NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED is usually required as well when this option is required.
+         */
         OUT_OF_ORDER_REPLAY,
+
+        /**
+         * Allows new steps to be executed before all steps from the previous run(s) of the pipeline were replayed
+         * This is not recommended when it can be avoided, because it prevents the pipeline from failing fast.
+         * Instead, the pipeline will have to finish and then fail if any
+         * non-replayed steps are left unless the IGNORE_NOT_REPLAYED_STEPS or ROLLBACK_ONLY_NOT_REPLAYED_STEPS
+         * options are enabled.
+         * <br>
+         * This option is usually required when OUT_OF_ORDER_REPLAY is required. This option requires
+         * OUT_OF_ORDER_REPLAY to also be enabled.
+         * <br>
+         * This option is necessary if the pipeline has concurrency or executes the steps in a non-deterministic
+         * order for some other reason. <b>This option is not necessary when using nested steps. They are handled
+         * in a different way that doesn't require this option to be enabled.</b>
+         */
         NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED(OUT_OF_ORDER_REPLAY),
+
+        /**
+         * Will not fail the whole pipeline nor trigger a rollback if some steps were not replayed. The non-replayed
+         * steps will not be cleaned up. This option is not recommended when ROLLBACK_ONLY_NOT_REPLAYED_STEPS
+         * can be used instead.
+         * Note: the pipeline will still fail if new steps are executed before every step has been replayed
+         * unless NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED is also enabled. The pipeline will still fail if
+         * steps are replayed out of order unless OUT_OF_ORDER_REPLAY is also enabled.
+         * This option is incompatible with ROLLBACK_ONLY_NOT_REPLAYED_STEPS.
+         */
         IGNORE_NOT_REPLAYED_STEPS,
+
+        /**
+         * Will not fail the whole pipeline and rollback only the non-replayed steps if some steps were not replayed.
+         * Note: the pipeline will still fail if new steps are executed before every step has been replayed
+         * unless NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED is also enabled. The pipeline will still fail if
+         * steps are replayed out of order unless OUT_OF_ORDER_REPLAY is also enabled.
+         * This option is incompatible with IGNORE_NOT_REPLAYED_STEPS.
+         */
         ROLLBACK_ONLY_NOT_REPLAYED_STEPS,
         ;
 

@@ -20,13 +20,13 @@ public class TestPersistence implements KanalarzPersistence {
     public List<StepCompletedEvent> stepCompletedEvents = Collections.synchronizedList(new ArrayList<>());
 
     @Override
-    public void stepStarted(StepStartedEvent stepStartedEvent) {
+    public void stepStarted(@NotNull StepStartedEvent stepStartedEvent) {
         stepStartedEvents.add(stepStartedEvent);
         log.info("Received step started event: {}", stepStartedEvent.toString());
     }
 
     @Override
-    public void stepCompleted(StepCompletedEvent stepCompletedEvent) {
+    public void stepCompleted(@NotNull StepCompletedEvent stepCompletedEvent) {
         stepCompletedEvents.add(stepCompletedEvent);
         log.info("Received step completed event: {}", stepCompletedEvent.toString());
     }

@@ -1,6 +1,5 @@
 package com.gbujak.kanalarz;
 
-import jakarta.annotation.Nonnull;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 
@@ -60,12 +59,12 @@ public class KanalarzContext {
     }
 
     @NonNull
-    public Optional<String> getMetadataOpt(@Nonnull String key) {
+    public Optional<String> getMetadataOpt(@NonNull String key) {
         return Optional.ofNullable(this.getMetadata(key));
     }
 
     @Nullable
-    public String putMetadata(@NonNull String key, @Nonnull String value) {
+    public String putMetadata(@NonNull String key, @NonNull String value) {
         return this.metadata.put(key, value);
     }
 

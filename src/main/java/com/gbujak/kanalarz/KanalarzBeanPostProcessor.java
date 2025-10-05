@@ -11,6 +11,7 @@ import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.lang.NonNull;
+import org.springframework.util.ClassUtils;
 import org.springframework.util.ReflectionUtils;
 
 import java.lang.reflect.Method;
@@ -34,8 +35,14 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
     }
 
     @Override
-    public Object postProcessAfterInitialization(Object target, @NonNull String beanName) throws BeansException {
-        var stepsComponent = target.getClass().getAnnotation(StepsHolder.class);
+    public Object postProcessAfterInitialization(
+        @NonNull Object target,
+        @NonNull String beanName
+    ) throws BeansException {
+
+        var targetClass = ClassUtils.getUserClass(target);
+
+        var stepsComponent = targetClass.getAnnotation(StepsHolder.class);
         if (stepsComponent == null) {
             return BeanPostProcessor.super.postProcessAfterInitialization(target, beanName);
         }
@@ -43,15 +50,15 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
         log.info("KANALARZ processing bean [{}] with step identifier [{}]", beanName, stepsComponent.identifier());
 
         // Should not be necessary, spring will fail on its own on a final class component, just in case
-        if (Modifier.isFinal(target.getClass().getModifiers())) {
+        if (Modifier.isFinal(targetClass.getModifiers())) {
             throw new RuntimeException(
                 "Class [%s] of bean [%s] if Final, can't use it as a steps container!"
-                    .formatted(target.getClass().getName(), beanName)
+                    .formatted(targetClass.getName(), beanName)
             );
         }
 
         try {
-            validateAndRegisterSteps(target, stepsComponent);
+            validateAndRegisterSteps(target, targetClass, stepsComponent);
         } catch (Exception e) {
             throw new RuntimeException(
                 "Failed to validate step in bean [%s] with identifier [%s]"
@@ -62,8 +69,8 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
 
         var proxyFactory = new ProxyFactory();
 
-        proxyFactory.setTargetClass(target.getClass());
-        proxyFactory.setInterfaces(target.getClass().getInterfaces());
+        proxyFactory.setTargetClass(targetClass);
+        proxyFactory.setInterfaces(targetClass.getInterfaces());
         proxyFactory.setTarget(target);
         proxyFactory.addAdvice((MethodInterceptor) invocation -> {
             var method = invocation.getMethod();
@@ -75,12 +82,22 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
             }
         });
 
-        return proxyFactory.getProxy(getClass().getClassLoader());
+        var classLoader = targetClass.getClassLoader();
+        if (classLoader == null) {
+            classLoader = Thread.currentThread().getContextClassLoader();
+        }
+
+        return proxyFactory.getProxy(classLoader);
     }
 
-    private void validateAndRegisterSteps(Object target, StepsHolder stepsHolder) {
+    private void validateAndRegisterSteps(
+        Object target,
+        Class<?> targetClass,
+        StepsHolder stepsHolder
+    ) {
+
         List<Method> methods = new ArrayList<>();
-        ReflectionUtils.doWithMethods(target.getClass(), methods::add);
+        ReflectionUtils.doWithMethods(targetClass, methods::add);
 
         // sort so rollbacks are at the back so it's easier to register them in the KanalarzContext class
         methods.sort(Comparator.comparing(it -> (Boolean) it.isAnnotationPresent(Rollback.class)));
@@ -107,7 +124,7 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
                     "Method [%s] in class [%s] annotated as step of rollback step [%s] is final which is not allowed!"
                         .formatted(
                             method.getName(),
-                            target.getClass().getName(),
+                            targetClass,
                             Stream.concat(
                                 Optional.ofNullable(step).map(Step::identifier).stream(),
                                 Optional.ofNullable(rollback).map(Rollback::forStep).stream()

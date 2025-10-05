@@ -21,7 +21,7 @@ public interface KanalarzPersistence {
         @NonNull String serializedParameters,
         boolean isFallible
     ) {}
-    void stepStarted(StepStartedEvent stepStartedEvent);
+    void stepStarted(@NonNull StepStartedEvent stepStartedEvent);
 
     record StepCompletedEvent(
         @NonNull UUID contextId,
@@ -34,7 +34,7 @@ public interface KanalarzPersistence {
         @NonNull String serializedExecutionResult,
         boolean failed
     ) {}
-    void stepCompleted(StepCompletedEvent stepCompletedEvent);
+    void stepCompleted(@NonNull StepCompletedEvent stepCompletedEvent);
 
     record StepExecutedInfo(
         @NonNull UUID stepId,

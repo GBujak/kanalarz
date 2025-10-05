@@ -43,5 +43,5 @@ public interface KanalarzSerialization {
         @NonNull Type returnType
     );
 
-    boolean parametersAreEqualIgnoringReturn(String left, String right);
+    boolean parametersAreEqualIgnoringReturn(@NonNull String left, @NonNull String right);
 }

@@ -107,7 +107,7 @@ public class TestSerialization implements KanalarzSerialization {
     }
 
     @Override
-    public boolean parametersAreEqualIgnoringReturn(String left, String right) {
+    public boolean parametersAreEqualIgnoringReturn(@NotNull String left, @NotNull String right) {
         try {
             return mapper.readTree(left).get("params")
                 .equals(mapper.readTree(right).get("params"));
