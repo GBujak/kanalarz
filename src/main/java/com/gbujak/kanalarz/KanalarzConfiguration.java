@@ -1,5 +1,6 @@
 package com.gbujak.kanalarz;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -7,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 public class KanalarzConfiguration {
 
     @Bean
-    KanalarzStepsRegistry kanalarzStepsRegistry() {
+    static KanalarzStepsRegistry kanalarzStepsRegistry() {
         return new KanalarzStepsRegistry();
     }
 
@@ -21,9 +22,9 @@ public class KanalarzConfiguration {
     }
 
     @Bean
-    KanalarzBeanPostProcessor kanalarzBeanPostProcessor(
-        Kanalarz kanalarz,
-        KanalarzStepsRegistry stepsRegistry
+    static KanalarzBeanPostProcessor kanalarzBeanPostProcessor(
+        ObjectProvider<Kanalarz> kanalarz,
+        ObjectProvider<KanalarzStepsRegistry> stepsRegistry
     ) {
         return new KanalarzBeanPostProcessor(kanalarz, stepsRegistry);
     }

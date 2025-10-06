@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.lang.NonNull;
 import org.springframework.util.ClassUtils;
@@ -20,18 +21,24 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 class KanalarzBeanPostProcessor implements BeanPostProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(KanalarzBeanPostProcessor.class);
 
-    private final Kanalarz kanalarz;
-    private final KanalarzStepsRegistry stepsRegistry;
+    private final ObjectProvider<Kanalarz> kanalarzProvider;
+    private final AtomicReference<Kanalarz> kanalarzAtomicRef = new AtomicReference<>();
 
-    public KanalarzBeanPostProcessor(Kanalarz kanalarz, KanalarzStepsRegistry stepsRegistry) {
-        this.kanalarz = kanalarz;
-        this.stepsRegistry = stepsRegistry;
+    private final ObjectProvider<KanalarzStepsRegistry> stepsRegistryProvider;
+
+    public KanalarzBeanPostProcessor(
+        ObjectProvider<Kanalarz> kanalarzProvider,
+        ObjectProvider<KanalarzStepsRegistry> stepsRegistryProvider
+    ) {
+        this.kanalarzProvider = kanalarzProvider;
+        this.stepsRegistryProvider = stepsRegistryProvider;
     }
 
     @Override
@@ -78,6 +85,11 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
             if (step == null) {
                 return method.invoke(target, invocation.getArguments());
             } else {
+                var kanalarz = kanalarzAtomicRef.get();
+                if (kanalarz == null) {
+                    kanalarz = kanalarzProvider.getObject();
+                    kanalarzAtomicRef.compareAndSet(null, kanalarz);
+                }
                 return kanalarz.handleMethodInvocation(target, invocation, stepsComponent, step);
             }
         });
@@ -135,11 +147,15 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
             }
 
             if (step != null) {
-                stepsRegistry.registerRollforwardStep(target, method, stepsHolder, step, returnIsSecret);
+                stepsRegistryProvider
+                    .getObject()
+                    .registerRollforwardStep(target, method, stepsHolder, step, returnIsSecret);
             }
 
             if (rollback != null) {
-                stepsRegistry.registerRollbackStep(target, method, stepsHolder, rollback, returnIsSecret);
+                stepsRegistryProvider
+                    .getObject()
+                    .registerRollbackStep(target, method, stepsHolder, rollback, returnIsSecret);
             }
         }
     }
