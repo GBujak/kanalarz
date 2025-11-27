@@ -40,6 +40,13 @@ This library determines the nullability by checking the most popular Java
 annotations (including `@Nullmarked` on the package and on the class). Kotlin
 nullability is checked using the `org.jetbrains.kotlin:kotlin-reflect` library.
 
+# Quick start
+
+1. You `@Import` the `KanalarzConfiguration` class
+2. You implement a KanalarzPersistence bean. [In-memory implementation for tests is here.](https://github.com/GBujak/kanalarz/blob/master/src/test/java/com/gbujak/kanalarz/testimplementations/TestPersistence.java)
+3. You implement a KanalarzSerialization bean. [Example Jackson-based implementation is here.](https://github.com/GBujak/kanalarz/blob/master/src/test/java/com/gbujak/kanalarz/testimplementations/TestSerialization.java)
+4. You inject a `Kanalarz` bean provided by this library's Configuration.
+
 ```java
 @Component 
 @StepsHolder(identifier = "test-steps") 
