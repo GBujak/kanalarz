@@ -12,6 +12,8 @@ Simple Spring library for persistent atomic jobs made of steps with rollbacks.
 </dependency>
 ```
 
+[![javadoc](https://javadoc.io/badge2/com.gbujak/kanalarz/javadoc.svg)](https://javadoc.io/doc/com.gbujak/kanalarz)
+
 You write the steps with rollbacks, write a job that calls these steps, and
 calling the rollbacks in case of a failure in the right order is handled
 automatically. 
@@ -157,6 +159,7 @@ You can choose to ignore the non-replayed steps, rollback only them leaving the
 rest commited, or fail the entire pipeline and rollback everything if any
 non-replayed steps remain at the end of the pipeline.
 
+[Pipeline configuration option docs](https://javadoc.io/doc/com.gbujak/kanalarz/latest/com/gbujak/kanalarz/Kanalarz.Option.html)
 
 ```java 
 UUID contextId = UUID.randomUUID(); 
