@@ -1,7 +1,8 @@
 package com.gbujak.kanalarz;
 
 import com.gbujak.kanalarz.annotations.*;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -10,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+@NullMarked
 class StepInfoClasses {
 
     static class StepInfo {

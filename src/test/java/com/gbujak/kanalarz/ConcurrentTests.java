@@ -57,7 +57,7 @@ class ConcurrentTestService {
 }
 
 @Component
-@StepsHolder(identifier = "concurrent-steps")
+@StepsHolder("concurrent-steps")
 class ConcurrentTestSteps {
 
     private ConcurrentTestService service;
@@ -71,17 +71,17 @@ class ConcurrentTestSteps {
         this.self = self;
     }
 
-    @Step(identifier = "add")
+    @Step("add")
     void add(int value) {
         service.add(value);
     }
 
-    @Rollback(forStep = "add")
+    @Rollback("add")
     void addRollback(int value) {
         service.undoAdd(value);
     }
 
-    @Step(identifier = "add-all-concurrently")
+    @Step("add-all-concurrently")
     void addAllConcurrently(List<Integer> values) {
         try (var x = Executors.newFixedThreadPool(8)) {
             for (var value : values) {

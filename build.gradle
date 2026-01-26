@@ -1,9 +1,9 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '3.5.5'
-	id 'io.spring.dependency-management' version '1.1.7'
-	id 'org.jetbrains.kotlin.jvm'
-    id "com.vanniktech.maven.publish" version "0.34.0"
+    id 'org.jetbrains.kotlin.jvm'
+    id 'com.vanniktech.maven.publish' version "0.36.0"
+    id 'io.spring.dependency-management' version '1.1.7'
+	id 'org.springframework.boot' version '4.0.2'
 }
 
 group = 'com.gbujak'
@@ -29,16 +29,18 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.springframework:spring-context'
 	implementation 'org.jetbrains.kotlin:kotlin-reflect'
+    implementation 'org.jspecify:jspecify'
     implementation 'org.slf4j:slf4j-api'
+    implementation 'org.springframework:spring-context'
 
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    testImplementation 'org.springframework.boot:spring-boot-starter'
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	testImplementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+
     testImplementation "com.fasterxml.jackson.core:jackson-databind"
     testImplementation "com.fasterxml.jackson.datatype:jackson-datatype-jdk8"
+	testImplementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    testImplementation 'org.springframework.boot:spring-boot-starter'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 
 tasks.named('test') {

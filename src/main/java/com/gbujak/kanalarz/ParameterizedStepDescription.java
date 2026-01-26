@@ -1,35 +1,34 @@
 package com.gbujak.kanalarz;
 
-import org.springframework.lang.NonNull;
+import org.jspecify.annotations.NullMarked;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
+@NullMarked
 public class ParameterizedStepDescription {
-    @NonNull private String parameterizedDescription;
-    @NonNull private List<String> parameters;
+    private final String parameterizedDescription;
+    private final List<String> parameters;
 
     private ParameterizedStepDescription(
-        @NonNull String parameterizedMessage,
-        @NonNull List<String> parameters
+        String parameterizedMessage,
+        List<String> parameters
     ) {
         this.parameterizedDescription = parameterizedMessage;
         this.parameters = parameters;
     }
 
-    @NonNull
     public String parameterizedDescription() {
         return parameterizedDescription;
     }
 
-    @NonNull
     public List<String> parameters() {
         return parameters;
     }
 
-    public static ParameterizedStepDescription parse(@NonNull String message) {
+    public static ParameterizedStepDescription parse(String message) {
         Objects.requireNonNull(message);
         List<String> extractedValues = new ArrayList<>();
         StringBuilder modifiedString = new StringBuilder(message.length());

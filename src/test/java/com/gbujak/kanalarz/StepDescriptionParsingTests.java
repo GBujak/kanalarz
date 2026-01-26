@@ -1,4 +1,5 @@
-import com.gbujak.kanalarz.ParameterizedStepDescription;
+package com.gbujak.kanalarz;
+
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

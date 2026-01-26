@@ -47,7 +47,7 @@ class TestNestedStepsService {
 }
 
 @Component
-@StepsHolder(identifier = "nested-steps")
+@StepsHolder("nested-steps")
 class TestNestedSteps {
 
     private TestNestedStepsService service;
@@ -58,17 +58,17 @@ class TestNestedSteps {
         this.self = self;
     }
 
-    @Step(identifier = "add")
+    @Step("add")
     public List<String> add(String message) {
         return service.add(message);
     }
 
-    @Rollback(forStep = "add")
+    @Rollback("add")
     public void remove(String message) {
         service.remove(message);
     }
 
-    @Step(identifier = "add-all")
+    @Step("add-all")
     public List<String> addAll(List<String> values) {
         List<String> result = null;
         for (var value : values) {
@@ -77,7 +77,7 @@ class TestNestedSteps {
         return result;
     }
 
-    @Step(identifier = "add-all-twice")
+    @Step("add-all-twice")
     public List<String> addAllTwice(List<String> values) {
         self.addAll(values);
         if (testException != null) {
@@ -94,7 +94,7 @@ class TestNestedSteps {
         testException = exception;
     }
 
-    @Step(identifier = "nested-with-rollback")
+    @Step("nested-with-rollback")
     public List<String> addAllAndExtraNestedWithRollback(List<String> values) {
         List<String> result = null;
         for (var value : values) {
@@ -104,7 +104,7 @@ class TestNestedSteps {
         return result;
     }
 
-    @Rollback(forStep = "nested-with-rollback")
+    @Rollback("nested-with-rollback")
     public void addAllAndExtraNestedWithRollbackRollback() {
         service.remove("extra");
     }

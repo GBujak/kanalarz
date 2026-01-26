@@ -1,11 +1,11 @@
 package com.gbujak.kanalarz;
 
 import com.gbujak.kanalarz.annotations.*;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 
@@ -42,7 +42,7 @@ class TestNameService {
 }
 
 @Component
-@StepsHolder(identifier = "test-steps")
+@StepsHolder("test-steps")
 class TestSteps {
 
     public static class RollbackStepNameNoLongerTheSameException extends RuntimeException {}
@@ -50,12 +50,12 @@ class TestSteps {
     @Autowired private TestNameService testNameService;
 
     @NonNull
-    @Step(identifier = "set-name")
+    @Step("set-name")
     public Optional<String> setName(String newName) {
         return Optional.ofNullable(testNameService.set(newName));
     }
 
-    @Rollback(forStep = "set-name")
+    @Rollback("set-name")
     public void setNameRollback(
         String newName,
         @NonNull @RollforwardOut Optional<String> originalName
@@ -67,12 +67,12 @@ class TestSteps {
     }
 
     @NonNull
-    @Step(identifier = "set-name-fallible", fallible = true)
+    @Step(value = "set-name-fallible", fallible = true)
     public StepOut<Optional<String>> setNameFallible(String name) {
         return StepOut.ofNullable(testNameService.set(name));
     }
 
-    @Rollback(forStep = "set-name-fallible", fallible = true)
+    @Rollback(value = "set-name-fallible", fallible = true)
     public void setNameFallibleRollback(
         @NonNull @RollforwardOut Optional<String> oldName,
         @Arg("name") String newName

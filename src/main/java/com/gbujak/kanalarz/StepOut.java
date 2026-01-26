@@ -1,13 +1,15 @@
 package com.gbujak.kanalarz;
 
-import org.springframework.lang.NonNull;
-import org.springframework.lang.Nullable;
+
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Objects;
 import java.util.Optional;
 
+@NullMarked
 public class StepOut<T> {
 
     @Nullable final private T value;
@@ -23,27 +25,24 @@ public class StepOut<T> {
         this.error = error;
     }
 
-    @NonNull
-    public static <T> StepOut<T> of(@NonNull T value) {
-        Objects.requireNonNull(
-            value,
-            "Can't use null value for StepOut. If you need an empty result, use StepOut<Optional<T>>"
-        );
-        return new StepOut<>(value, null);
+    public static <T> StepOut<T> of(T value) {
+        return StepOut.ofNonNullOrThrow(value);
     }
 
-    @NonNull
+    public static <T> StepOut<T> ofNonNullOrThrow(@Nullable T value) {
+        Objects.requireNonNull(value);
+        return (StepOut<T>) new StepOut<>(value, null);
+    }
+
     public static <T> StepOut<Optional<T>> ofNullable(@Nullable T value) {
         return StepOut.of(Optional.ofNullable(value));
     }
 
-    @NonNull
     public static <T> StepOut<Optional<T>> empty(@Nullable T value) {
         return StepOut.of(Optional.empty());
     }
 
-    @NonNull
-    public static <T> StepOut<T> err(@NonNull Throwable error) {
+    public static <T> StepOut<T> err(Throwable error) {
         Objects.requireNonNull(
             error,
             "Can't use null error for StepOut. If you need an empty result, use StepOut<Optional<T>>"
@@ -51,9 +50,8 @@ public class StepOut<T> {
         return new StepOut<>(null, error);
     }
 
-    @NonNull
     public Optional<T> value() {
-        return Optional.ofNullable(value);
+        return (Optional<T>) Optional.ofNullable(value);
     }
 
     @Nullable
@@ -66,9 +64,8 @@ public class StepOut<T> {
         return value;
     }
 
-    @NonNull
     public Optional<Throwable> error() {
-        return Optional.ofNullable(error);
+        return (Optional<Throwable>) Optional.ofNullable(error);
     }
 
     @Nullable
@@ -76,7 +73,6 @@ public class StepOut<T> {
         return error;
     }
 
-    @NonNull
     public T valueOrThrow() {
         if (error != null) {
             if (error instanceof RuntimeException runtimeException) {
@@ -112,7 +108,6 @@ public class StepOut<T> {
      * Get type wrapped in StepOut or the parameter back if the parameter is not a StepOut
      * @throws IllegalArgumentException if stepOutType is a Class reference and type parameters were erased
      */
-    @NonNull
     public static Type unwrapStepOutType(Type stepOutType) {
         if (!StepOut.isTypeStepOut(stepOutType)) {
             return stepOutType;

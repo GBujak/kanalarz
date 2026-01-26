@@ -3,8 +3,7 @@ package com.gbujak.kanalarz;
 import com.gbujak.kanalarz.annotations.Rollback;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
-import org.jetbrains.annotations.NotNull;
-import org.springframework.lang.NonNull;
+import org.jspecify.annotations.NullMarked;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -12,6 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+@NullMarked
 class KanalarzStepsRegistry {
 
     private final Map<String, StepInfoClasses.StepInfo> steps = new HashMap<>();
@@ -169,13 +169,11 @@ class KanalarzStepsRegistry {
         }
     }
 
-    @NonNull
     StepInfoClasses.StepInfo getStepInfoOrThrow(StepsHolder stepsHolder, Step step) {
         var identifier = stepIdentifier(stepsHolder, step);
         return getStepInfoOrThrow(identifier);
     }
 
-    @NonNull
     Optional<StepInfoClasses.StepInfo> getStepRollbackInfo(String stepIdentifier) {
         return Optional.of(stepIdentifier)
             .map(this.rollbackStepsForRollforwardSteps::get)
@@ -189,17 +187,14 @@ class KanalarzStepsRegistry {
             );
     }
 
-    @NotNull
     static String stepIdentifier(StepsHolder stepsHolder, Step step) {
-        return "%s:%s".formatted(stepsHolder.identifier(), step.identifier());
+        return "%s:%s".formatted(stepsHolder.value(), step.value());
     }
 
-    @NotNull
     static String stepIdentifier(StepsHolder stepsHolder, Rollback rollback) {
-        return "%s:%s".formatted(stepsHolder.identifier(), rollback.forStep());
+        return "%s:%s".formatted(stepsHolder.value(), rollback.value());
     }
 
-    @NotNull
     static String rollbackIdentifier(StepsHolder stepsHolder, Rollback rollback) {
         return "%s:rollback".formatted(stepIdentifier(stepsHolder, rollback));
     }

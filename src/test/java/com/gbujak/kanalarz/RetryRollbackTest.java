@@ -41,17 +41,17 @@ class RetryRollbackTestService {
 }
 
 @Component
-@StepsHolder(identifier = "retry-rollback-test-steps")
+@StepsHolder("retry-rollback-test-steps")
 class RetryRollbackTestSteps {
 
     @Autowired private RetryRollbackTestService service;
 
-    @Step(identifier = "create-post")
+    @Step("create-post")
     public UUID createPost(String post) {
         return service.createPost(post);
     }
 
-    @Rollback(forStep = "create-post")
+    @Rollback("create-post")
     public void rollbackCreatePost(@RollforwardOut UUID postId) {
         service.deletePost(postId);
     }

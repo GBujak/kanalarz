@@ -1,7 +1,7 @@
 package com.gbujak.kanalarz.annotations;
 
+import org.jspecify.annotations.NullMarked;
 import org.springframework.aot.hint.annotation.Reflective;
-import org.springframework.lang.NonNull;
 
 import java.lang.annotation.*;
 
@@ -11,9 +11,9 @@ import java.lang.annotation.*;
 @Inherited
 @Reflective
 @Documented
+@NullMarked
 public @interface Arg {
 
     /** @return The name for the argument */
-    @NonNull
     String value();
 }

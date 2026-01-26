@@ -1,8 +1,12 @@
 package com.gbujak.kanalarz;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 
+@NullMarked
 sealed interface KanalarzStepReplayer {
 
     final class KanalarzInOrderStepReplayer implements KanalarzStepReplayer {
@@ -231,7 +235,7 @@ sealed interface KanalarzStepReplayer {
     }
 
     sealed interface SearchResult {
-        record Found(Object value) implements SearchResult {}
+        record Found(@Nullable Object value) implements SearchResult {}
         record NotFound() implements SearchResult {}
         record FoundShouldRerun() implements SearchResult {}
 

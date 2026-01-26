@@ -5,13 +5,14 @@ import com.gbujak.kanalarz.annotations.Secret;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.aopalliance.intercept.MethodInterceptor;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.BeanPostProcessor;
-import org.springframework.lang.NonNull;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.ReflectionUtils;
 
@@ -24,12 +25,13 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
+@NullMarked
 class KanalarzBeanPostProcessor implements BeanPostProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(KanalarzBeanPostProcessor.class);
 
     private final ObjectProvider<Kanalarz> kanalarzProvider;
-    private final AtomicReference<Kanalarz> kanalarzAtomicRef = new AtomicReference<>();
+    private final AtomicReference<@Nullable Kanalarz> kanalarzAtomicRef = new AtomicReference<>();
 
     private final ObjectProvider<KanalarzStepsRegistry> stepsRegistryProvider;
 
@@ -42,9 +44,10 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
     }
 
     @Override
+    @Nullable
     public Object postProcessAfterInitialization(
-        @NonNull Object target,
-        @NonNull String beanName
+        Object target,
+        String beanName
     ) throws BeansException {
 
         var targetClass = ClassUtils.getUserClass(target);
@@ -54,7 +57,7 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
             return BeanPostProcessor.super.postProcessAfterInitialization(target, beanName);
         }
 
-        log.info("KANALARZ processing bean [{}] with step identifier [{}]", beanName, stepsComponent.identifier());
+        log.info("KANALARZ processing bean [{}] with step identifier [{}]", beanName, stepsComponent.value());
 
         // Should not be necessary, spring will fail on its own on a final class component, just in case
         if (Modifier.isFinal(targetClass.getModifiers())) {
@@ -69,7 +72,7 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
         } catch (Exception e) {
             throw new RuntimeException(
                 "Failed to validate step in bean [%s] with identifier [%s]"
-                    .formatted(beanName, stepsComponent.identifier()),
+                    .formatted(beanName, stepsComponent.value()),
                 e
             );
         }
@@ -138,8 +141,8 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
                             method.getName(),
                             targetClass,
                             Stream.concat(
-                                Optional.ofNullable(step).map(Step::identifier).stream(),
-                                Optional.ofNullable(rollback).map(Rollback::forStep).stream()
+                                Optional.ofNullable(step).map(Step::value).stream(),
+                                Optional.ofNullable(rollback).map(Rollback::value).stream()
                             ).findAny()
                                 .orElse("n/a")
                         )

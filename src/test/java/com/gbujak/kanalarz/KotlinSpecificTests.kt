@@ -22,30 +22,30 @@ internal open class KotlinSpecificTestsService {
 }
 
 @Component
-@StepsHolder(identifier = "kotlin-specific-tests-steps")
+@StepsHolder("kotlin-specific-tests-steps")
 internal open class KotlinSpecificTestsSteps {
 
     @Autowired private lateinit var service: KotlinSpecificTestsService
 
-    @Step(identifier = "default-param-step")
+    @Step("default-param-step")
     open fun defaultParamStep(name: String = "test"): String {
         val upper = name.uppercase()
         service.setName(upper)
         return upper
     }
 
-    @Rollback(forStep = "default-param-step")
+    @Rollback("default-param-step")
     open fun defaultParamStepRollback(name: String) {
         service.setName(name.lowercase())
     }
 
     open var setterStep: String = "initial"
-        @Step(identifier = "setter-step")
+        @Step("setter-step")
         set(value) {
             field = value
         }
 
-    @Rollback(forStep = "setter-step")
+    @Rollback("setter-step")
     open fun setterStepRollback(value: String?) {
         setterStep = value!!.reversed()
     }

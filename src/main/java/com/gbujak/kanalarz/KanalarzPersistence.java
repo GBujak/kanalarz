@@ -1,49 +1,49 @@
 package com.gbujak.kanalarz;
 
-import org.springframework.lang.NonNull;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+@NullMarked
 public interface KanalarzPersistence {
 
     record StepStartedEvent(
-        @NonNull UUID contextId,
-        @NonNull UUID stepId,
-        @NonNull Optional<UUID> parentStepId,
-        @NonNull Optional<UUID> stepIsRollbackFor,
-        @NonNull Map<String, String> metadata,
-        @NonNull String stepIdentifier,
+        UUID contextId,
+        UUID stepId,
+        Optional<UUID> parentStepId,
+        Optional<UUID> stepIsRollbackFor,
+        Map<String, String> metadata,
+        String stepIdentifier,
         @Nullable ParameterizedStepDescription description,
-        @NonNull String serializedParameters,
+        String serializedParameters,
         boolean isFallible
     ) {}
-    void stepStarted(@NonNull StepStartedEvent stepStartedEvent);
+    void stepStarted(StepStartedEvent stepStartedEvent);
 
     record StepCompletedEvent(
-        @NonNull UUID contextId,
-        @NonNull UUID stepId,
-        @NonNull Optional<UUID> parentStepId,
-        @NonNull Optional<UUID> stepIsRollbackFor,
-        @NonNull Map<String, String> metadata,
-        @NonNull String stepIdentifier,
+        UUID contextId,
+        UUID stepId,
+        Optional<UUID> parentStepId,
+        Optional<UUID> stepIsRollbackFor,
+        Map<String, String> metadata,
+        String stepIdentifier,
         @Nullable ParameterizedStepDescription description,
-        @NonNull String serializedExecutionResult,
+        String serializedExecutionResult,
         boolean failed
     ) {}
-    void stepCompleted(@NonNull StepCompletedEvent stepCompletedEvent);
+    void stepCompleted(StepCompletedEvent stepCompletedEvent);
 
     record StepExecutedInfo(
-        @NonNull UUID stepId,
-        @NonNull String stepIdentifier,
-        @NonNull String serializedExecutionResult,
-        @NonNull Optional<UUID> parentStepId,
-        @NonNull Optional<UUID> wasRollbackFor,
+        UUID stepId,
+        String stepIdentifier,
+        String serializedExecutionResult,
+        Optional<UUID> parentStepId,
+        Optional<UUID> wasRollbackFor,
         boolean failed
     ) {}
-    @NonNull
-    List<StepExecutedInfo> getExecutedStepsInContextInOrderOfExecution(@NonNull UUID contextId);
+    List<StepExecutedInfo> getExecutedStepsInContextInOrderOfExecution(UUID contextId);
 }

@@ -4,8 +4,9 @@ import com.gbujak.kanalarz.KanalarzStepReplayer.SearchResult;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.aopalliance.intercept.MethodInvocation;
-import org.springframework.lang.NonNull;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
 /**
  * Entrypoint of the Kanalarz pipeline library
  */
+@NullMarked
 public class Kanalarz {
 
     private final ConcurrentHashMap<UUID, CancellableContextState>
@@ -45,7 +47,7 @@ public class Kanalarz {
     }
 
     private static final AtomicInteger activeContexts = new AtomicInteger();
-    private static final ThreadLocal<KanalarzContext>
+    private static final ThreadLocal<@Nullable KanalarzContext>
         kanalarzContextThreadLocal = new InheritableThreadLocal<>();
 
     /**
@@ -61,9 +63,8 @@ public class Kanalarz {
      * Get current pipeline context
      * @return current pipeline context or empty Optional if not in a context
      */
-    @NonNull
     public static Optional<KanalarzContext> contextOpt() {
-        return Optional.ofNullable(kanalarzContextThreadLocal.get());
+        return (Optional<@NonNull KanalarzContext>) Optional.ofNullable(kanalarzContextThreadLocal.get());
     }
 
     /**
@@ -71,12 +72,12 @@ public class Kanalarz {
      * @return current pipeline context
      * @throws IllegalStateException if not in a pipeline context
      */
-    @NonNull
     public static KanalarzContext contextOrThrow() {
         return contextOpt()
             .orElseThrow(() -> new IllegalStateException("Not within a context"));
     }
 
+    @Nullable
     Object handleMethodInvocation(
         Object target,
         MethodInvocation invocation,
@@ -116,6 +117,7 @@ public class Kanalarz {
         );
     }
 
+    @Nullable
     private Object handleInContextMethodExecution(
         Object target,
         Method method,
@@ -152,7 +154,7 @@ public class Kanalarz {
                 case SearchResult.Found(var value) -> {
                     return
                         StepOut.isTypeStepOut(stepInfo.returnType)
-                            ? StepOut.of(value)
+                            ? StepOut.ofNonNullOrThrow(value)
                             : value;
                 }
 
@@ -257,22 +259,28 @@ public class Kanalarz {
      * Create a new pipeline context builder
      * @return new context builder
      */
-    @NonNull
     public KanalarzContextBuilder newContext() {
         return new KanalarzContextBuilder();
     }
 
     private <T> T inContext(
-        @NonNull Map<String, String> metadata,
+        Map<String, String> metadata,
         @Nullable UUID resumesContext,
-        @NonNull Function<KanalarzContext, T> body,
-        @NonNull EnumSet<Option> options,
+        Function<KanalarzContext, T> body,
+        EnumSet<Option> options,
         boolean resumeReplay
     ) {
         KanalarzContext previous = kanalarzContextThreadLocal.get();
         if (previous != null) {
             throw new KanalarzException.KanalarzIllegalUsageException(
                 "Nested kanalarz context [" + previous.getId() + "] with metadata " + previous.fullMetadata()
+            );
+        }
+
+        if (resumeReplay && resumesContext == null) {
+            throw new KanalarzException.KanalarzIllegalUsageException(
+                "Resume replay only makes sense when resuming some context! " +
+                    "Tried to resume replay with a fresh context!"
             );
         }
 
@@ -343,13 +351,6 @@ public class Kanalarz {
     }
 
     private KanalarzStepReplayer createStepReplayer(UUID resumesContext, EnumSet<Option> options) {
-        if (resumesContext == null) {
-            throw new KanalarzException.KanalarzIllegalUsageException(
-                "Resume replay only makes sense when resuming some context! " +
-                    "Tried to resume replay with a fresh context!"
-            );
-        }
-
         var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(resumesContext);
 
         if (options.contains(Option.OUT_OF_ORDER_REPLAY)) {
@@ -360,9 +361,9 @@ public class Kanalarz {
     }
 
     private void rollbackInContext(
-        @NonNull Map<String, String> metadata,
+        Map<String, String> metadata,
         @Nullable UUID resumesContext,
-        @NonNull EnumSet<Option> options
+        EnumSet<Option> options
     ) {
         try (var autoCloseableContext = new AutoCloseableContext(metadata, resumesContext, options, null)) {
             performRollback(autoCloseableContext.context(), null, options, null);
@@ -370,8 +371,8 @@ public class Kanalarz {
     }
 
     private void performRollback(
-        @NonNull KanalarzContext context,
-        Throwable originalError,
+        KanalarzContext context,
+        @Nullable Throwable originalError,
         EnumSet<Option> options,
         @Nullable Set<UUID> specificStepsToRollbackOnly
     ) {
@@ -442,7 +443,7 @@ public class Kanalarz {
                 continue;
             }
 
-            Object[] parameters = new Object[rollback.paramsInfo.size()];
+            @Nullable Object[] parameters = new Object[rollback.paramsInfo.size()];
             for (int i = 0; i < rollback.paramsInfo.size(); i++) {
                 var paramInfo = rollback.paramsInfo.get(i);
 
@@ -530,7 +531,7 @@ public class Kanalarz {
     public class KanalarzContextBuilder {
 
         @Nullable private UUID resumeContext;
-        @NonNull private final Map<String, String> metadata = new HashMap<>();
+        private final Map<String, String> metadata = new HashMap<>();
         private final EnumSet<Option> options = EnumSet.noneOf(Option.class);
 
         /**
@@ -539,7 +540,6 @@ public class Kanalarz {
          * @param resumes the ID to use
          * @return this to continue building
          */
-        @NonNull
         public KanalarzContextBuilder resumes(@Nullable UUID resumes) {
             this.resumeContext = resumes;
             return this;
@@ -550,7 +550,6 @@ public class Kanalarz {
          * @param option option to enable
          * @return this to continue building
          */
-        @NonNull
         public KanalarzContextBuilder option(Option option) {
             return option(option, true);
         }
@@ -561,7 +560,6 @@ public class Kanalarz {
          * @param enable whether the option should be enabled
          * @return this to continue building
          */
-        @NonNull
         public KanalarzContextBuilder option(Option option, boolean enable) {
             if (enable) {
                 var newOptions = EnumSet.copyOf(options);
@@ -588,8 +586,7 @@ public class Kanalarz {
          * @param value value of the metadata
          * @return this to continue building
          */
-        @NonNull
-        public KanalarzContextBuilder metadata(@NonNull String key, @NonNull String value) {
+        public KanalarzContextBuilder metadata(String key, String value) {
             metadata.put(key, value);
             return this;
         }
@@ -600,7 +597,7 @@ public class Kanalarz {
          * @return the return of the block parameter
          * @param <T> return type of block
          */
-        public <T> T start(Function<KanalarzContext, T> block) {
+        public <T extends @Nullable Object> T start(Function<KanalarzContext, T> block) {
             validateDependantOptions();
             return inContext(metadata, resumeContext, block, options, false);
         }
@@ -638,7 +635,7 @@ public class Kanalarz {
          * @param <T> return type of block
          * @return the return of the block parameter
          */
-        public <T> T startResumeReplay(Function<KanalarzContext, T> block) {
+        public <T extends @Nullable Object> T startResumeReplay(Function<KanalarzContext, T> block) {
             validateDependantOptions();
             return inContext(metadata, resumeContext, block, options, true);
         }
@@ -700,7 +697,6 @@ public class Kanalarz {
      * Get running contexts globally.
      * @return unmodifiable set of running contexts
      */
-    @NonNull
     public Set<UUID> runningContexts() {
         return Collections.unmodifiableSet(cancellableContexts.keySet());
     }
@@ -712,7 +708,7 @@ public class Kanalarz {
      * @param contextId context id to cancel
      * @throws IllegalStateException if the context has already been cancelled or is not running
      */
-    public void cancelContext(@NonNull UUID contextId) {
+    public void cancelContext(UUID contextId) {
         Objects.requireNonNull(contextId);
         cancelContext(contextId, CancellableContextState.CANCELLED);
     }
@@ -724,12 +720,12 @@ public class Kanalarz {
      * @param contextId context id to cancel
      * @throws IllegalStateException if the context has already been cancelled or is not running
      */
-    public void cancelContextForceDeferRollback(@NonNull UUID contextId) {
+    public void cancelContextForceDeferRollback(UUID contextId) {
         Objects.requireNonNull(contextId);
         cancelContext(contextId, CancellableContextState.CANCELLED_FORCE_DEFER_ROLLBACK);
     }
 
-    private void cancelContext(@NonNull UUID contextId, @NonNull CancellableContextState newState) {
+    private void cancelContext(UUID contextId, CancellableContextState newState) {
         if (newState == CancellableContextState.CANCELLABLE) {
             throw new IllegalArgumentException("Can't uncancel a context");
         }
@@ -744,16 +740,17 @@ public class Kanalarz {
         );
     }
 
+    @NullMarked
     private class AutoCloseableContext implements AutoCloseable {
 
         private final KanalarzContext context;
-        private final UUID newContextId;
+        private final @Nullable UUID newContextId;
 
         AutoCloseableContext(
             Map<String, String> metadata,
-            UUID resumesContext,
+            @Nullable UUID resumesContext,
             EnumSet<Option> options,
-            KanalarzStepReplayer stepReplayer
+            @Nullable KanalarzStepReplayer stepReplayer
         ) {
             context = new KanalarzContext(
                 resumesContext,
@@ -767,7 +764,7 @@ public class Kanalarz {
             cancellableContexts.put(newContextId, CancellableContextState.CANCELLABLE);
         }
 
-        @NonNull
+
         public KanalarzContext context() {
             return Objects.requireNonNull(context);
         }
@@ -872,7 +869,7 @@ public class Kanalarz {
         ROLLBACK_ONLY_NOT_REPLAYED_STEPS,
         ;
 
-        Option mustHave = null;
+        @Nullable Option mustHave = null;
 
         Option() { }
         Option(Option mustHave) {

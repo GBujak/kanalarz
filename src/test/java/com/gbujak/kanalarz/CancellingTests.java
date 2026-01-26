@@ -41,17 +41,17 @@ class CancellingTestsService {
 }
 
 @Component
-@StepsHolder(identifier = "cancellling-tests-steps")
+@StepsHolder("cancellling-tests-steps")
 class CancellingTestsSteps {
 
     @Autowired private CancellingTestsService service;
 
-    @Step(identifier = "set-value")
+    @Step("set-value")
     String setValue(String value) {
         return service.setValue(value);
     }
 
-    @Rollback(forStep = "set-value")
+    @Rollback("set-value")
     void rollbackSetValue(@RollforwardOut String oldValue) {
         service.setValue(oldValue);
     }

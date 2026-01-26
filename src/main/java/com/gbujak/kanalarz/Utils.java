@@ -5,9 +5,10 @@ import kotlin.jvm.internal.Reflection;
 import kotlin.reflect.KClass;
 import kotlin.reflect.KFunction;
 import kotlin.reflect.KParameter;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.lang.NonNull;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
@@ -15,16 +16,19 @@ import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.List;
 
+@NullMarked
 class Utils {
 
     private static final Logger log = LoggerFactory.getLogger(Utils.class);
 
     public static boolean isNonNullable(Parameter parameter) {
-        if (isAnnotatedWithNullable(parameter.getAnnotations())) {
+        if (isAnnotatedWithNullable(parameter.getAnnotations())
+                || isAnnotatedWithNullable(parameter.getAnnotatedType().getAnnotations())) {
             return false;
         }
 
-        if (isAnnotatedWithNonNullable(parameter.getAnnotations())) {
+        if (isAnnotatedWithNonNullable(parameter.getAnnotations())
+                || isAnnotatedWithNonNullable(parameter.getAnnotatedType().getAnnotations())) {
             return true;
         }
 
@@ -45,11 +49,13 @@ class Utils {
     }
 
     public static boolean isReturnTypeNonNullable(Method method) {
-        if (isAnnotatedWithNullable(method.getAnnotations())) {
+        if (isAnnotatedWithNullable(method.getAnnotations())
+                || isAnnotatedWithNullable(method.getAnnotatedReturnType().getAnnotations())) {
             return false;
         }
 
-        if (isAnnotatedWithNonNullable(method.getAnnotations())) {
+        if (isAnnotatedWithNonNullable(method.getAnnotations())
+                || isAnnotatedWithNonNullable(method.getAnnotatedReturnType().getAnnotations())) {
             return true;
         }
 
@@ -189,9 +195,8 @@ class Utils {
         return false;
     }
 
-    @NonNull
     static ArrayList<KanalarzSerialization.SerializeParameterInfo> makeSerializeParametersInfo(
-        Object[] arguments,
+        @Nullable Object[] arguments,
         StepInfoClasses.StepInfo stepInfo
     ) {
         var serializeParametersInfo = new ArrayList<KanalarzSerialization.SerializeParameterInfo>(arguments.length);
@@ -210,7 +215,6 @@ class Utils {
         return serializeParametersInfo;
     }
 
-    @NonNull
     static List<KanalarzSerialization.DeserializeParameterInfo>
     makeDeserializeParamsInfo(List<StepInfoClasses.ParamInfo> paramsInfo) {
         return paramsInfo.stream()

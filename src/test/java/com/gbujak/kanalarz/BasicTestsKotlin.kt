@@ -11,7 +11,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.lang.NonNull
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import java.util.*
@@ -40,7 +39,7 @@ internal class TestNameServiceKotlin {
 }
 
 @Component
-@StepsHolder(identifier = "test-steps-kotlin")
+@StepsHolder("test-steps-kotlin")
 internal open class TestStepsKotlin {
 
     class RollbackStepNameNoLongerTheSameException : RuntimeException()
@@ -48,12 +47,12 @@ internal open class TestStepsKotlin {
     @Autowired
     private lateinit var testNameService: TestNameServiceKotlin
 
-    @Step(identifier = "set-name")
+    @Step("set-name")
     open fun setName(newName: String?): String? {
         return testNameService.set(newName)
     }
 
-    @Rollback(forStep = "set-name")
+    @Rollback("set-name")
     open fun setNameRollback(
         newName: String?,
         @RollforwardOut originalName: String?,
@@ -64,21 +63,20 @@ internal open class TestStepsKotlin {
         testNameService.set(originalName)
     }
 
-    @NonNull
-    @Step(identifier = "set-name-fallible", fallible = true)
+    @Step("set-name-fallible", fallible = true)
     @StepDescription("test test {{namee}}, {name}, {name}, {name}, {name}")
     open fun setNameFallible(name: String?): StepOut<Optional<String>> {
         return StepOut.ofNullable(testNameService.set(name))
     }
 
-    @Rollback(forStep = "set-name-fallible", fallible = true)
+    @Rollback("set-name-fallible", fallible = true)
     @StepDescription("test test {{namee}}, {name}, {oldName}")
     open fun setNameFallibleRollback(
-        @NonNull @RollforwardOut oldName: Optional<String>,
+        @RollforwardOut oldName: Optional<String>,
         @Arg("name") newName: String?
     ) {
         if (testNameService.name() != newName) {
-            throw RuntimeException("Name is no longer " + newName)
+            throw RuntimeException("Name is no longer $newName")
         }
         testNameService.set(oldName.orElse(null))
     }
@@ -228,7 +226,7 @@ class BasicTestsKotlin {
             .matches { e ->
                 if (e !is KanalarzRollbackStepFailedException) return@matches false
                 e.initialStepFailedException == exception &&
-                    e.rollbackStepFailedException::class.java ==
+                    e.rollbackStepFailedException!!::class.java ==
                         RollbackStepNameNoLongerTheSameException::class.java
             }
 

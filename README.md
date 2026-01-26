@@ -8,7 +8,7 @@ Simple Spring library for persistent atomic jobs made of steps with rollbacks.
 <dependency>
     <groupId>com.gbujak</groupId>
     <artifactId>kanalarz</artifactId>
-    <version>2.2.0</version>
+    <version>3.0.0</version>
 </dependency>
 ```
 
@@ -49,18 +49,18 @@ nullability is checked using the `org.jetbrains.kotlin:kotlin-reflect` library.
 
 ```java
 @Component 
-@StepsHolder(identifier = "test-steps") 
+@StepsHolder("test-steps") 
 class TestSteps {
 
     @Autowired private TestNameService testNameService;
 
     @NonNull
-    @Step(identifier = "set-name")
+    @Step("set-name")
     public Optional<String> setName(String newName) {
         return Optional.ofNullable(testNameService.set(newName));
     }
 
-    @Rollback(forStep = "set-name")
+    @Rollback("set-name")
     public void setNameRollback(
         String newName, // <-- determined by the name of the parameter
         @NonNull @RollforwardOut Optional<String> originalName

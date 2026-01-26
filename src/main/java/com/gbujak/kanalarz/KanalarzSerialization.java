@@ -1,47 +1,47 @@
 package com.gbujak.kanalarz;
 
-import org.springframework.lang.NonNull;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
 
+@NullMarked
 public interface KanalarzSerialization {
 
     record SerializeParameterInfo(
-        @NonNull String name,
-        @NonNull Type type,
+        String name,
+        Type type,
         @Nullable Object value,
         boolean secret
     ) {}
     record SerializeReturnInfo(
-        @NonNull Type type,
+        Type type,
         @Nullable Object value,
         @Nullable Throwable error,
         boolean secret
     ) {}
-    @NonNull
+
     String serializeStepCalled(
-        @NonNull List<SerializeParameterInfo> parametersInfo,
+        List<SerializeParameterInfo> parametersInfo,
         @Nullable SerializeReturnInfo returnInfo
     );
 
     record DeserializeParameterInfo(
-        @NonNull String name,
-        @NonNull Type type
+        String name,
+        Type type
     ) {}
     record DeserializeParametersResult(
-        @NonNull Map<String, Object> parameters,
+        Map<String, @Nullable Object> parameters,
         @Nullable Object executionResult,
         @Nullable Throwable executionError
     ) {}
-    @NonNull
-    DeserializeParametersResult deserializeParameters(
-        @NonNull String serialized,
-        @NonNull List<DeserializeParameterInfo> parametersInfo,
-        @NonNull Type returnType
-    );
 
-    boolean parametersAreEqualIgnoringReturn(@NonNull String left, @NonNull String right);
+    DeserializeParametersResult deserializeParameters(
+        String serialized,
+        List<DeserializeParameterInfo> parametersInfo,
+        Type returnType
+    );
+    boolean parametersAreEqualIgnoringReturn(String left,  String right);
 }

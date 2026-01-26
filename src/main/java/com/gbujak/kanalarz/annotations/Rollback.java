@@ -1,7 +1,7 @@
 package com.gbujak.kanalarz.annotations;
 
+import org.jspecify.annotations.NullMarked;
 import org.springframework.aot.hint.annotation.Reflective;
-import org.springframework.lang.NonNull;
 
 import java.lang.annotation.*;
 
@@ -23,15 +23,14 @@ import java.lang.annotation.*;
 @Inherited
 @Documented
 @Reflective
+@NullMarked
 public @interface Rollback {
 
     /** Identifier of the step this is a rollback for. */
-    @NonNull
-    String forStep();
+    String value();
 
     /** If this is set to false the rollback will be interrupted when this method throws. If set to true,
      * the failure will be ignored and the rollback will continue. A step completed event will still be
      * emitted notifying that this rollback step failed. */
-    @NonNull
     boolean fallible() default false;
 }
