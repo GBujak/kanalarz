@@ -22,7 +22,6 @@ public interface KanalarzSerialization {
         @Nullable Throwable error,
         boolean secret
     ) {}
-
     String serializeStepCalled(
         List<SerializeParameterInfo> parametersInfo,
         @Nullable SerializeReturnInfo returnInfo
@@ -37,11 +36,11 @@ public interface KanalarzSerialization {
         @Nullable Object executionResult,
         @Nullable Throwable executionError
     ) {}
-
     DeserializeParametersResult deserializeParameters(
         String serialized,
         List<DeserializeParameterInfo> parametersInfo,
         Type returnType
     );
+
     boolean parametersAreEqualIgnoringReturn(String left,  String right);
 }

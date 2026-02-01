@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -220,5 +221,20 @@ class Utils {
         return paramsInfo.stream()
             .map(it -> new KanalarzSerialization.DeserializeParameterInfo(it.paramName, it.type))
             .toList();
+    }
+
+    @Nullable
+    static Object voidOrUnitValue(Type type) {
+        if (type.equals(void.class) || type.equals(Void.class)) {
+            return null;
+        } else if (type.getTypeName().equals("kotlin.Unit")) {
+            try {
+                return Class.forName("kotlin.Unit").getField("INSTANCE").get(null);
+            } catch (Exception e) {
+                throw new RuntimeException("Error creating the kotlin.Unit value!", e);
+            }
+        } else {
+            throw new IllegalArgumentException("Type is not void, Void, or kotlin.Unit! " + type.getTypeName());
+        }
     }
 }

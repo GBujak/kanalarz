@@ -20,7 +20,8 @@ public interface KanalarzPersistence {
         String stepIdentifier,
         @Nullable ParameterizedStepDescription description,
         String serializedParameters,
-        boolean isFallible
+        boolean isFallible,
+        boolean isRollbackMarker
     ) {}
     void stepStarted(StepStartedEvent stepStartedEvent);
 
@@ -33,7 +34,8 @@ public interface KanalarzPersistence {
         String stepIdentifier,
         @Nullable ParameterizedStepDescription description,
         String serializedExecutionResult,
-        boolean failed
+        boolean failed,
+        boolean isRollbackMarker
     ) {}
     void stepCompleted(StepCompletedEvent stepCompletedEvent);
 

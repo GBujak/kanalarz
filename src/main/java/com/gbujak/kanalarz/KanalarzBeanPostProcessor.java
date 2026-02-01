@@ -1,9 +1,6 @@
 package com.gbujak.kanalarz;
 
-import com.gbujak.kanalarz.annotations.Rollback;
-import com.gbujak.kanalarz.annotations.Secret;
-import com.gbujak.kanalarz.annotations.Step;
-import com.gbujak.kanalarz.annotations.StepsHolder;
+import com.gbujak.kanalarz.annotations.*;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -18,10 +15,7 @@ import org.springframework.util.ReflectionUtils;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
@@ -85,7 +79,8 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
         proxyFactory.addAdvice((MethodInterceptor) invocation -> {
             var method = invocation.getMethod();
             Step step = method.getAnnotation(Step.class);
-            if (step == null) {
+            RollbackOnly rollbackOnly = method.getAnnotation(RollbackOnly.class);
+            if (step == null && rollbackOnly == null) {
                 return method.invoke(target, invocation.getArguments());
             } else {
                 var kanalarz = kanalarzAtomicRef.get();
@@ -93,7 +88,7 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
                     kanalarz = kanalarzProvider.getObject();
                     kanalarzAtomicRef.compareAndSet(null, kanalarz);
                 }
-                return kanalarz.handleMethodInvocation(target, invocation, stepsComponent, step);
+                return kanalarz.handleMethodInvocation(target, invocation, stepsComponent, step, rollbackOnly);
             }
         });
 
@@ -120,13 +115,14 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
         for (var method : methods) {
             var step = method.getAnnotation(Step.class);
             var rollback = method.getAnnotation(Rollback.class);
+            var rollbackOnly = method.getAnnotation(RollbackOnly.class);
             var returnIsSecret = method.getAnnotation(Secret.class) != null;
 
-            if (step == null && rollback == null) {
+            if (step == null && rollback == null && rollbackOnly == null) {
                 continue;
             }
 
-            if (step != null && rollback != null) {
+            if (Stream.of(step, rollback, rollbackOnly).filter(Objects::nonNull).count() > 1) {
                 throw new RuntimeException(
                     "Method [%s] can't be a step and a rollback at the same time!"
                         .formatted(method.getName())
@@ -159,6 +155,12 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
                 stepsRegistryProvider
                     .getObject()
                     .registerRollbackStep(target, method, stepsHolder, rollback, returnIsSecret);
+            }
+
+            if (rollbackOnly != null) {
+                stepsRegistryProvider
+                    .getObject()
+                    .registerRollbackOnlyStep(target, method, stepsHolder, rollbackOnly, returnIsSecret);
             }
         }
     }

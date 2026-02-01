@@ -38,7 +38,7 @@ public class StepOut<T> {
         return StepOut.of(Optional.ofNullable(value));
     }
 
-    public static <T> StepOut<Optional<T>> empty(@Nullable T value) {
+    public static <T> StepOut<Optional<T>> empty() {
         return StepOut.of(Optional.empty());
     }
 

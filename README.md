@@ -8,7 +8,7 @@ Simple Spring library for persistent atomic jobs made of steps with rollbacks.
 <dependency>
     <groupId>com.gbujak</groupId>
     <artifactId>kanalarz</artifactId>
-    <version>3.0.0</version>
+    <version>3.1.0</version>
 </dependency>
 ```
 

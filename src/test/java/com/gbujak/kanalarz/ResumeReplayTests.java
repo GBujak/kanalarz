@@ -1,6 +1,7 @@
 package com.gbujak.kanalarz;
 
 import com.gbujak.kanalarz.annotations.Rollback;
+import com.gbujak.kanalarz.annotations.RollbackOnly;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,6 +57,11 @@ class ResumeReplayTestSteps {
     @Rollback("add")
     public void remove(String message) {
         service.remove(message);
+    }
+
+    @RollbackOnly("rollback-only")
+    void rollbackOnly(String message) {
+        service.add(message);
     }
 }
 
@@ -450,5 +456,44 @@ public class ResumeReplayTests {
         assertThat(service.getMessages()).isEqualTo(
             List.of("test-1", "test-2")
         );
+    }
+
+    @Test
+    void shouldResumeReplayWithRollbackOnlyStep() {
+        UUID contextId = UUID.randomUUID();
+        var exception = new RuntimeException();
+
+        assertThatThrownBy(() ->
+            kanalarz
+                .newContext()
+                .resumes(contextId)
+                .option(Kanalarz.Option.DEFER_ROLLBACK)
+                .consume(ctx -> {
+                    steps.rollbackOnly("rollback");
+                    assertThat(steps.add("test-1")).isEqualTo(List.of("test-1"));
+                    throw exception;
+                })
+        )
+            .isExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
+            .hasCause(exception);
+
+        assertThat(service.getMessages()).isEqualTo(List.of("test-1"));
+
+        kanalarz
+            .newContext()
+            .resumes(contextId)
+            .consumeResumeReplay(ctx -> {
+                steps.rollbackOnly("rollback");
+                assertThat(steps.add("test-1")).isEqualTo(List.of("test-1"));
+                assertThat(steps.add("test-2")).isEqualTo(List.of("test-1", "test-2"));
+            });
+
+        assertThat(service.getMessages()).isEqualTo(
+            List.of("test-1", "test-2")
+        );
+
+        kanalarz.newContext().resumes(contextId).rollbackNow();
+
+        assertThat(service.getMessages()).isEqualTo(List.of("rollback"));
     }
 }

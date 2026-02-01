@@ -15,16 +15,18 @@ import java.util.Optional;
 class StepInfoClasses {
 
     static class StepInfo {
-        Method method;
-        Object target;
+        @Nullable Method method;
+        @Nullable Object target;
         @Nullable Step step;
         @Nullable Rollback rollback;
+        @Nullable RollbackOnly rollbackOnly;
         @Nullable ParameterizedStepDescription description;
         StepsHolder stepsHolder;
         Type returnType;
         boolean isReturnTypeNonNullable;
         List<ParamInfo> paramsInfo;
         boolean returnIsSecret;
+        boolean rollbackMarker;
 
         private StepInfo() {}
 
@@ -35,7 +37,16 @@ class StepInfoClasses {
             Step step,
             boolean returnIsSecret
         ) {
-            return doCreateNew(target, method, stepsHolder, step, null, returnIsSecret);
+            return doCreateNew(
+                target,
+                method,
+                stepsHolder,
+                step,
+                null,
+                null,
+                returnIsSecret,
+                false
+            );
         }
 
         public static StepInfo createNew(
@@ -45,7 +56,47 @@ class StepInfoClasses {
             Rollback rollback,
             boolean returnIsSecret
         ) {
-            return doCreateNew(target, method, stepsHolder, null, rollback, returnIsSecret);
+            return doCreateNew(
+                target,
+                method,
+                stepsHolder,
+                null,
+                rollback,
+                null,
+                returnIsSecret,
+                false
+            );
+        }
+
+        public static  StepInfo[] createNew(
+            Object target,
+            Method method,
+            StepsHolder stepsHolder,
+            RollbackOnly rollbackOnly,
+            boolean returnIsSecret
+        ) {
+            return new StepInfo[] {
+                doCreateNew(
+                    target,
+                    method,
+                    stepsHolder,
+                    null,
+                    null,
+                    rollbackOnly,
+                    returnIsSecret,
+                    true
+                ),
+                doCreateNew(
+                    target,
+                    method,
+                    stepsHolder,
+                    null,
+                    null,
+                    rollbackOnly,
+                    returnIsSecret,
+                    false
+                )
+            };
         }
 
         private static StepInfo doCreateNew(
@@ -54,7 +105,9 @@ class StepInfoClasses {
             StepsHolder stepsHolder,
             @Nullable Step step,
             @Nullable Rollback rollback,
-            boolean returnIsSecret
+            @Nullable RollbackOnly rollbackOnly,
+            boolean returnIsSecret,
+            boolean rollbackMarker
         ) {
             var stepInfo = new StepInfo();
             stepInfo.stepsHolder = stepsHolder;
@@ -62,12 +115,18 @@ class StepInfoClasses {
             stepInfo.method = method;
             stepInfo.step = step;
             stepInfo.rollback = rollback;
+            stepInfo.rollbackOnly = rollbackOnly;
             stepInfo.returnIsSecret = returnIsSecret;
-            stepInfo.description =
-                Optional.ofNullable(method.getAnnotation(StepDescription.class))
-                    .map(StepDescription::value)
-                    .map(ParameterizedStepDescription::parse)
-                    .orElse(null);
+            stepInfo.rollbackMarker = rollbackMarker;
+
+            if (!rollbackMarker) {
+                stepInfo.description =
+                    Optional.ofNullable(method.getAnnotation(StepDescription.class))
+                        .map(StepDescription::value)
+                        .map(ParameterizedStepDescription::parse)
+                        .orElse(null);
+            }
+
             stepInfo.returnType = method.getGenericReturnType();
             stepInfo.isReturnTypeNonNullable = Utils.isReturnTypeNonNullable(method);
             stepInfo.paramsInfo = new ArrayList<>(method.getParameterCount());

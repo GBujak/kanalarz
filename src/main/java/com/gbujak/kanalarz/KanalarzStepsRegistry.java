@@ -1,6 +1,7 @@
 package com.gbujak.kanalarz;
 
 import com.gbujak.kanalarz.annotations.Rollback;
+import com.gbujak.kanalarz.annotations.RollbackOnly;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.jspecify.annotations.NullMarked;
@@ -149,6 +150,40 @@ class KanalarzStepsRegistry {
         rollbackStepsForRollforwardSteps.put(stepIdentifier, rollbackIdentifier);
     }
 
+    synchronized void registerRollbackOnlyStep(
+        Object target,
+        Method method,
+        StepsHolder stepsHolder,
+        RollbackOnly rollbackOnly,
+        boolean returnIsSecret
+    ) {
+        var stepIdentifier = stepIdentifier(stepsHolder, rollbackOnly);
+        var rollbackIdentifier = rollbackIdentifier(stepsHolder, rollbackOnly);
+
+        if (this.steps.containsKey(stepIdentifier) || this.steps.containsKey(rollbackIdentifier)) {
+            throw new RuntimeException("Duplicated step identifier %s".formatted(rollbackIdentifier));
+        }
+
+        var stepInfos = StepInfoClasses.StepInfo.createNew(target, method, stepsHolder, rollbackOnly, returnIsSecret);
+        assert stepInfos.length == 2;
+        var step = stepInfos[0];
+        var rollbackStep = stepInfos[1];
+
+        validateDescription(rollbackStep);
+
+        if (
+            !step.returnType.equals(void.class)
+                && !step.returnType.equals(Void.class)
+                && !step.returnType.getTypeName().equals("kotlin.Unit")
+        ) {
+            throw new RuntimeException("Methods marked with RollbackOnly must return void, Void, or kotlin.Unit!");
+        }
+
+        steps.put(stepIdentifier, step);
+        steps.put(rollbackIdentifier, rollbackStep);
+        rollbackStepsForRollforwardSteps.put(stepIdentifier, rollbackIdentifier);
+    }
+
     private void validateDescription(StepInfoClasses.StepInfo stepInfo) {
         var description = stepInfo.description;
         if (description == null) {
@@ -171,6 +206,11 @@ class KanalarzStepsRegistry {
 
     StepInfoClasses.StepInfo getStepInfoOrThrow(StepsHolder stepsHolder, Step step) {
         var identifier = stepIdentifier(stepsHolder, step);
+        return getStepInfoOrThrow(identifier);
+    }
+
+    StepInfoClasses.StepInfo getStepInfoOrThrow(StepsHolder stepsHolder, RollbackOnly rollbackOnly) {
+        var identifier = stepIdentifier(stepsHolder, rollbackOnly);
         return getStepInfoOrThrow(identifier);
     }
 
@@ -197,5 +237,13 @@ class KanalarzStepsRegistry {
 
     static String rollbackIdentifier(StepsHolder stepsHolder, Rollback rollback) {
         return "%s:rollback".formatted(stepIdentifier(stepsHolder, rollback));
+    }
+
+    static String stepIdentifier(StepsHolder stepsHolder, RollbackOnly rollbackOnly) {
+        return "%s:%s".formatted(stepsHolder.value(), rollbackOnly.value());
+    }
+
+    static String rollbackIdentifier(StepsHolder stepsHolder, RollbackOnly rollbackOnly) {
+        return "%s:rollback".formatted(stepIdentifier(stepsHolder, rollbackOnly));
     }
 }

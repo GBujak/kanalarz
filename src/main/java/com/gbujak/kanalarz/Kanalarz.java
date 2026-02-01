@@ -1,6 +1,7 @@
 package com.gbujak.kanalarz;
 
 import com.gbujak.kanalarz.KanalarzStepReplayer.SearchResult;
+import com.gbujak.kanalarz.annotations.RollbackOnly;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.aopalliance.intercept.MethodInvocation;
@@ -16,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Entrypoint of the Kanalarz pipeline library
@@ -82,14 +84,27 @@ public class Kanalarz {
         Object target,
         MethodInvocation invocation,
         StepsHolder stepsHolder,
-        Step step
+        @Nullable Step step,
+        @Nullable RollbackOnly rollbackOnly
     ) {
 
         var method = invocation.getMethod();
         var arguments = invocation.getArguments();
 
+        if (step == null && rollbackOnly == null) {
+            throw new KanalarzException.KanalarzInternalError(
+                "Handling method invocation on step that isn't a step or a rollback marker, " +
+                    "this should never happen!",
+                null
+            );
+        }
+
         var context = context();
         if (context == null) {
+            if (rollbackOnly != null) {
+                return Utils.voidOrUnitValue(invocation.getMethod().getGenericReturnType());
+            }
+
             try {
                 return method.invoke(target, arguments);
             } catch (InvocationTargetException error) {
@@ -110,6 +125,7 @@ public class Kanalarz {
                 arguments,
                 stepsHolder,
                 step,
+                rollbackOnly,
                 stepStack.current(),
                 stepStack.parentStepId(),
                 context
@@ -123,7 +139,8 @@ public class Kanalarz {
         Method method,
         Object[] arguments,
         StepsHolder stepsHolder,
-        Step step,
+        @Nullable Step step,
+        @Nullable RollbackOnly rollbackOnly,
         UUID stepId,
         @Nullable UUID parentStepId,
         KanalarzContext context
@@ -136,9 +153,22 @@ public class Kanalarz {
             default -> {}
         }
 
-        var stepInfo = stepsRegistry.getStepInfoOrThrow(stepsHolder, step);
+        StepInfoClasses.StepInfo stepInfo;
+        String stepIdentifier;
+
+        if (step != null) {
+            stepInfo = stepsRegistry.getStepInfoOrThrow(stepsHolder, step);
+            stepIdentifier = KanalarzStepsRegistry.stepIdentifier(stepsHolder, step);
+        } else if (rollbackOnly != null) {
+            stepInfo = stepsRegistry.getStepInfoOrThrow(stepsHolder, rollbackOnly);
+            stepIdentifier = KanalarzStepsRegistry.stepIdentifier(stepsHolder, rollbackOnly);
+        } else {
+            throw new KanalarzException.KanalarzInternalError(
+                "Handling invocation of a method that is both a step and a rollback-only marker!", null
+            );
+        }
+
         var serializeParametersInfo = Utils.makeSerializeParametersInfo(arguments, stepInfo);
-        var stepIdentifier = KanalarzStepsRegistry.stepIdentifier(stepsHolder, step);
 
         var stepReplayer = context.stepReplayer();
         var serializedParameters = serialization.serializeStepCalled(serializeParametersInfo, null);
@@ -181,7 +211,8 @@ public class Kanalarz {
             stepIdentifier,
             stepInfo.description,
             serializedParameters,
-            step.fallible()
+            step != null && step.fallible(),
+            stepInfo.rollbackMarker
         ));
 
         Object result = null;
@@ -189,8 +220,10 @@ public class Kanalarz {
         boolean unwrappedStepOut = false;
         String resultSerialized;
         try {
-            result = method.invoke(target, arguments);
-            if (step.fallible() && result == null) {
+            result = rollbackOnly != null
+                ? Utils.voidOrUnitValue(stepInfo.returnType)
+                : method.invoke(target, arguments);
+            if (step != null && step.fallible() && result == null) {
                 throw new KanalarzException.KanalarzIllegalUsageException(
                     "Fallible step [%s] returned null instead of a StepOut instance!"
                         .formatted(stepIdentifier)
@@ -238,20 +271,23 @@ public class Kanalarz {
             stepIdentifier,
             stepInfo.description,
             resultSerialized,
-            failed
+            failed,
+            stepInfo.rollbackMarker
         ));
 
         if (failed) {
-            if (step.fallible()) {
+            if (step != null && step.fallible()) {
                 return StepOut.err(error);
             } else {
                 throw new KanalarzException.KanalarzStepFailedException(error);
             }
         } else {
-            return unwrappedStepOut
-                // StepOut can't hold a null value, so unwrapped value should never be null
-                ? StepOut.of(Objects.requireNonNull(result))
-                : result;
+            if (unwrappedStepOut && result == null) {
+                throw new KanalarzException.KanalarzInternalError(
+                    "Unwrapped StepOut had a null value! This should never happen!", null
+                );
+            }
+            return unwrappedStepOut ? StepOut.of(result) : result;
         }
     }
 
@@ -409,12 +445,24 @@ public class Kanalarz {
                 continue;
             }
 
-            if (rollback.rollback == null) {
+            if (Stream.of(rollback.rollback, rollback.rollbackOnly).filter(Objects::nonNull).count() != 1) {
                 throw new KanalarzException.KanalarzInternalError(
-                    "Step [%s] is rollback but had no rollback info"
-                        .formatted(rollback),
+                    ("Step [%s] is rollback and should have either a rollback info or a rollbackOnly info " +
+                        "but had none or both!").formatted(rollback),
                     null
                 );
+            }
+
+            boolean fallible;
+            String rollbackIdentifier;
+            if (rollback.rollback != null) {
+                fallible = rollback.rollback.fallible();
+                rollbackIdentifier = KanalarzStepsRegistry.rollbackIdentifier(rollback.stepsHolder, rollback.rollback);
+            } else if (rollback.rollbackOnly != null) {
+                fallible = rollback.rollbackOnly.fallible();
+                rollbackIdentifier = KanalarzStepsRegistry.rollbackIdentifier(rollback.stepsHolder, rollback.rollbackOnly);
+            } else {
+                throw new KanalarzException.KanalarzInternalError("Unreachable!", null);
             }
 
             var executedRollbackFailed = executedRollbacks.get(rollforward.stepId());
@@ -477,15 +525,22 @@ public class Kanalarz {
                     Optional.empty(),
                     Optional.of(rollforward.stepId()),
                     context.fullMetadata(),
-                    KanalarzStepsRegistry.rollbackIdentifier(rollback.stepsHolder, rollback.rollback),
+                    rollbackIdentifier,
                     rollback.description,
                     serializedParameters,
-                    rollback.rollback.fallible()
+                    fallible,
+                    stepInfo.rollbackMarker
                 ));
 
                 Object result = null;
                 Throwable error = null;
                 try {
+                    if (rollback.method == null) {
+                        throw new KanalarzException.KanalarzInternalError(
+                            "Rollback had null method reference this should never happen!",
+                            null
+                        );
+                    }
                     result = rollback.method.invoke(rollback.target, parameters);
                 } catch (InvocationTargetException e) {
                     error = e.getTargetException();
@@ -510,13 +565,14 @@ public class Kanalarz {
                     Optional.empty(),
                     Optional.of(rollforward.stepId()),
                     context.fullMetadata(),
-                    KanalarzStepsRegistry.rollbackIdentifier(rollback.stepsHolder, rollback.rollback),
+                    rollbackIdentifier,
                     rollback.description,
                     serializedResult,
-                    failed
+                    failed,
+                    stepInfo.rollbackMarker
                 ));
 
-                if (failed && !rollback.rollback.fallible() && !options.contains(Option.ALL_ROLLBACK_STEPS_FALLIBLE)) {
+                if (failed && !fallible && !options.contains(Option.ALL_ROLLBACK_STEPS_FALLIBLE)) {
                     throw new KanalarzException.KanalarzRollbackStepFailedException(originalError, error);
                 }
 

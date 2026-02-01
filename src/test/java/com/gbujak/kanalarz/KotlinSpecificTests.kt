@@ -1,13 +1,17 @@
 package com.gbujak.kanalarz
 
 import com.gbujak.kanalarz.annotations.Rollback
+import com.gbujak.kanalarz.annotations.RollbackOnly
 import com.gbujak.kanalarz.annotations.Step
 import com.gbujak.kanalarz.annotations.StepsHolder
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.stereotype.Component
+import java.util.*
 
 @Component
 internal open class KotlinSpecificTestsService {
@@ -49,6 +53,11 @@ internal open class KotlinSpecificTestsSteps {
     open fun setterStepRollback(value: String?) {
         setterStep = value!!.reversed()
     }
+
+    @RollbackOnly("rollback-only-kotlin-step")
+    open fun rollbackOnly() {
+        service.setName("name-from-rollback-only-step")
+    }
 }
 
 @SpringBootTest
@@ -57,6 +66,11 @@ class KotlinSpecificTests {
     @Autowired private lateinit var kanalarz: Kanalarz
     @Autowired private lateinit var steps: KotlinSpecificTestsSteps
     @Autowired private lateinit var service: KotlinSpecificTestsService
+
+    @BeforeEach
+    fun beforeEach() {
+        service.setName("")
+    }
 
     @Test
     fun rollbackStepWithDefaultParameter() {
@@ -81,5 +95,22 @@ class KotlinSpecificTests {
             }
         }
         assertThat(steps.setterStep).isEqualTo("cba")
+    }
+
+    @Test
+    fun rollbackOnlyStepKotlin() {
+        val contextId = UUID.randomUUID()
+        val exception = RuntimeException("test")
+        kanalarz.newContext().resumes(contextId).consume {
+            assertThat(steps.rollbackOnly()).isEqualTo(Unit)
+        }
+        assertThat(service.name()).isEqualTo("")
+
+        assertThatThrownBy {
+            kanalarz.newContext().resumes(contextId).consume {
+                throw exception
+            }
+        }.hasCause(exception)
+        assertThat(service.name()).isEqualTo("name-from-rollback-only-step")
     }
 }
