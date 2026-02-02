@@ -6,9 +6,11 @@ import org.springframework.aot.hint.annotation.Reflective;
 import java.lang.annotation.*;
 
 /**
- * Provide a description for the step. You can use placeholders that reference some step params
- * with <code>{paramName}</code>. The context will fail to start when a placeholder is detected
- * with a param name that can't be found. use <code>{{}}</code> for a brace character literal.
+ * Provide a human-readable description for a step.
+ * <p>
+ * Use placeholders with <code>{paramName}</code> to reference step parameters.
+ * Use <code>{{literal}}</code> to render literal braces.
+ * Spring context initialization fails if any placeholder references an unknown parameter.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
@@ -18,9 +20,8 @@ import java.lang.annotation.*;
 public @interface StepDescription {
 
     /**
-     * The value of the step description. You can use placeholders that reference some step params
-     * with <code>{paramName}</code>. The context will fail to start when a placeholder is detected
-     * with a param name that can't be found. use <code>{{}}</code> for a brace character literal.
+     * Description template value.
+     * @return template string
      */
     String value();
 }

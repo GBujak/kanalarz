@@ -7,6 +7,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Parsed step description template with placeholder order preserved.
+ */
 @NullMarked
 public class ParameterizedStepDescription {
     private final String parameterizedDescription;
@@ -20,14 +23,31 @@ public class ParameterizedStepDescription {
         this.parameters = parameters;
     }
 
+    /**
+     * Get normalized description where placeholders are represented as <code>{}</code>.
+     * @return normalized description
+     */
     public String parameterizedDescription() {
         return parameterizedDescription;
     }
 
+    /**
+     * Get ordered list of placeholder parameter names extracted from template.
+     * @return placeholder parameter names
+     */
     public List<String> parameters() {
         return parameters;
     }
 
+    /**
+     * Parse a template that uses:
+     * <ul>
+     *     <li><code>{name}</code> for placeholders</li>
+     *     <li><code>{{literal}}</code> for literal braces</li>
+     * </ul>
+     * @param message template to parse
+     * @return parsed description with normalized template and extracted placeholder list
+     */
     public static ParameterizedStepDescription parse(String message) {
         Objects.requireNonNull(message);
         List<String> extractedValues = new ArrayList<>();

@@ -33,6 +33,7 @@ dependencies {
     implementation 'org.jspecify:jspecify'
     implementation 'org.slf4j:slf4j-api'
     implementation 'org.springframework:spring-context'
+    implementation 'com.github.f4b6a3:uuid-creator:6.1.1'
 
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
@@ -47,6 +48,9 @@ tasks.named('test') {
 	useJUnitPlatform()
     beforeTest { descriptor ->
         logger.lifecycle("${descriptor}")
+    }
+    testLogging {
+        outputs.upToDateWhen {false}
     }
 }
 
@@ -82,4 +86,3 @@ mavenPublishing {
         }
     }
 }
-

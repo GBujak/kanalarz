@@ -1,9 +1,6 @@
 package com.gbujak.kanalarz
 
-import com.gbujak.kanalarz.annotations.Rollback
-import com.gbujak.kanalarz.annotations.RollbackOnly
-import com.gbujak.kanalarz.annotations.Step
-import com.gbujak.kanalarz.annotations.StepsHolder
+import com.gbujak.kanalarz.annotations.*
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
@@ -17,12 +14,19 @@ import java.util.*
 internal open class KotlinSpecificTestsService {
 
     private var name: String = ""
+    private var number: Int? = null
 
     fun setName(name: String) {
         this.name = name
     }
 
     fun name(): String = name
+
+    fun setNumber(number: Int?) {
+        this.number = number
+    }
+
+    fun number(): Int? = number
 }
 
 @Component
@@ -58,6 +62,30 @@ internal open class KotlinSpecificTestsSteps {
     open fun rollbackOnly() {
         service.setName("name-from-rollback-only-step")
     }
+
+    @Step("overloaded-int-step")
+    open fun overloadedIntStep(value: Int): Int {
+        val previous = service.number() ?: Int.MIN_VALUE
+        service.setNumber(value)
+        return previous
+    }
+
+    @Step("overloaded-int-nullable-step")
+    open fun overloadedIntStep(value: Int?): Int? {
+        val previous = service.number()
+        service.setNumber(value)
+        return previous
+    }
+
+    @Rollback("overloaded-int-step")
+    open fun overloadedIntStepRollback(value: Int, @RollforwardOut previous: Int) {
+        service.setNumber(previous)
+    }
+
+    @Rollback("overloaded-int-nullable-step")
+    open fun overloadedIntStepRollback(value: Int?, @RollforwardOut previous: Int?) {
+        service.setNumber(previous)
+    }
 }
 
 @SpringBootTest
@@ -70,6 +98,7 @@ class KotlinSpecificTests {
     @BeforeEach
     fun beforeEach() {
         service.setName("")
+        service.setNumber(null)
     }
 
     @Test
@@ -112,5 +141,26 @@ class KotlinSpecificTests {
             }
         }.hasCause(exception)
         assertThat(service.name()).isEqualTo("name-from-rollback-only-step")
+    }
+
+    @Test
+    fun overloadedStepMethodsUseCorrectNullabilitySignatureForRollbackValidation() {
+        val contextId = UUID.randomUUID()
+        val exception = RuntimeException("test")
+        service.setNumber(7)
+
+        assertThatThrownBy {
+            kanalarz.newContext().resumes(contextId).consume {
+                assertThat(steps.overloadedIntStep(42)).isEqualTo(7)
+                assertThat(service.number()).isEqualTo(42)
+
+                assertThat(steps.overloadedIntStep(null as Int?)).isEqualTo(42)
+                assertThat(service.number()).isNull()
+
+                throw exception
+            }
+        }.hasCause(exception)
+
+        assertThat(service.number()).isEqualTo(7)
     }
 }

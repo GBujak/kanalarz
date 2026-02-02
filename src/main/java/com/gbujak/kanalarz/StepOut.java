@@ -9,6 +9,10 @@ import java.lang.reflect.Type;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * Wrapper used by fallible Kanalarz steps to return either a value or an error.
+ * @param <T> wrapped successful value type
+ */
 @NullMarked
 public class StepOut<T> {
 
@@ -25,23 +29,45 @@ public class StepOut<T> {
         this.error = error;
     }
 
+    /**
+     * Create successful result.
+     * @param value successful value
+     * @param <T> value type
+     * @return successful StepOut
+     */
     public static <T> StepOut<T> of(T value) {
         return StepOut.ofNonNullOrThrow(value);
     }
 
-    public static <T> StepOut<T> ofNonNullOrThrow(@Nullable T value) {
-        Objects.requireNonNull(value);
-        return (StepOut<T>) new StepOut<>(value, null);
+    static <T> StepOut<T> ofNonNullOrThrow(@Nullable T value) {
+        return new StepOut<T>(Objects.requireNonNull(value), null);
     }
 
+    /**
+     * Create successful optional result from nullable value.
+     * @param value nullable value
+     * @param <T> inner value type
+     * @return successful StepOut of Optional
+     */
     public static <T> StepOut<Optional<T>> ofNullable(@Nullable T value) {
         return StepOut.of(Optional.ofNullable(value));
     }
 
+    /**
+     * Create successful empty optional result.
+     * @param <T> inner value type
+     * @return successful StepOut containing Optional.empty()
+     */
     public static <T> StepOut<Optional<T>> empty() {
         return StepOut.of(Optional.empty());
     }
 
+    /**
+     * Create failed result.
+     * @param error failure
+     * @param <T> value type
+     * @return failed StepOut
+     */
     public static <T> StepOut<T> err(Throwable error) {
         Objects.requireNonNull(
             error,
@@ -50,29 +76,54 @@ public class StepOut<T> {
         return new StepOut<>(null, error);
     }
 
+    /**
+     * Get successful value as optional.
+     * @return optional value
+     */
     public Optional<T> value() {
-        return (Optional<T>) Optional.ofNullable(value);
+        return Optional.ofNullable(value);
     }
 
+    /**
+     * Get value or fallback when this result is failed.
+     * @param other fallback value
+     * @return value or fallback
+     */
     @Nullable
     public T valueOrElse(@Nullable T other) {
         return value == null ? other : value;
     }
 
+    /**
+     * Get value or null.
+     * @return value or null
+     */
     @Nullable
     public T valueOrNull() {
         return value;
     }
 
+    /**
+     * Get failure as optional.
+     * @return optional error
+     */
     public Optional<Throwable> error() {
-        return (Optional<Throwable>) Optional.ofNullable(error);
+        return Optional.ofNullable(error);
     }
 
+    /**
+     * Get failure or null.
+     * @return error or null
+     */
     @Nullable
     public Throwable errorOrNull() {
         return error;
     }
 
+    /**
+     * Get value or throw stored error.
+     * @return successful value
+     */
     public T valueOrThrow() {
         if (error != null) {
             if (error instanceof RuntimeException runtimeException) {
@@ -87,14 +138,27 @@ public class StepOut<T> {
         return value;
     }
 
+    /**
+     * Check whether this result carries a successful value.
+     * @return true when this result carries a value
+     */
     public boolean isOk() {
         return this.value != null;
     }
 
+    /**
+     * Check whether this result carries an error.
+     * @return true when this result carries an error
+     */
     public boolean isErr() {
         return this.value == null;
     }
 
+    /**
+     * Check whether a type is {@link StepOut} or {@code StepOut<...>}.
+     * @param type type to inspect
+     * @return true if type represents StepOut
+     */
     public static boolean isTypeStepOut(Type type) {
         if (type instanceof ParameterizedType pt) {
             return pt.getRawType().equals(StepOut.class);
@@ -106,6 +170,8 @@ public class StepOut<T> {
 
     /**
      * Get type wrapped in StepOut or the parameter back if the parameter is not a StepOut
+     * @param stepOutType type to unwrap
+     * @return wrapped type argument, or original type when not StepOut
      * @throws IllegalArgumentException if stepOutType is a Class reference and type parameters were erased
      */
     public static Type unwrapStepOutType(Type stepOutType) {

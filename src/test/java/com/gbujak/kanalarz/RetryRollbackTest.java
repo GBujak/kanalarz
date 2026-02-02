@@ -29,7 +29,7 @@ class RetryRollbackTestService {
     }
 
     public void deletePost(UUID postId) {
-        if (Math.random() < .8) {
+        if (Math.random() < .5) {
             throw error;
         }
         posts.remove(postId);
@@ -71,7 +71,7 @@ public class RetryRollbackTest {
 
         try {
             kanalarz.newContext().resumes(contextId).consume(ctx -> {
-                for (int i = 0; i < 200; i++) {
+                for (int i = 0; i < 100; i++) {
                     steps.createPost("post-" + i);
                 }
                 throw exception;

@@ -1,7 +1,7 @@
 package com.gbujak.kanalarz.testimplementations;
 
 import com.gbujak.kanalarz.KanalarzPersistence;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Component
+@NullMarked
 public class TestPersistence implements KanalarzPersistence {
 
     private static final Logger log = LoggerFactory.getLogger(TestPersistence.class);
@@ -20,29 +21,31 @@ public class TestPersistence implements KanalarzPersistence {
     public List<StepCompletedEvent> stepCompletedEvents = Collections.synchronizedList(new ArrayList<>());
 
     @Override
-    public void stepStarted(@NotNull StepStartedEvent stepStartedEvent) {
+    public void stepStarted(StepStartedEvent stepStartedEvent) {
         stepStartedEvents.add(stepStartedEvent);
-        log.info("Received step started event: {}", stepStartedEvent.toString());
     }
 
     @Override
-    public void stepCompleted(@NotNull StepCompletedEvent stepCompletedEvent) {
+    public void stepCompleted(StepCompletedEvent stepCompletedEvent) {
         stepCompletedEvents.add(stepCompletedEvent);
-        log.info("Received step completed event: {}", stepCompletedEvent.toString());
     }
 
-    @NotNull
     @Override
-    public List<StepExecutedInfo> getExecutedStepsInContextInOrderOfExecution(@NotNull UUID contextId) {
-        return stepCompletedEvents.stream()
-            .filter(it -> it.contextId().equals(contextId))
+    public List<StepExecutedInfo> getExecutedStepsInContextInOrderOfExecutionStarted(UUID contextId) {
+        return stepStartedEvents.stream()
+            .filter(it -> it.contexts().contains(contextId))
+            .map(started -> stepCompletedEvents.stream().filter(completed ->
+                completed.stepId().equals(started.stepId())).findFirst().orElseThrow()
+            )
             .map(it -> new StepExecutedInfo(
+                it.contexts(),
                 it.stepId(),
                 it.stepIdentifier(),
                 it.serializedExecutionResult(),
                 it.parentStepId(),
                 it.stepIsRollbackFor(),
-                it.failed()
+                it.failed(),
+                it.executionPath()
             ))
             .toList();
     }

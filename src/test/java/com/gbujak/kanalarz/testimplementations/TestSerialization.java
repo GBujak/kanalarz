@@ -5,8 +5,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.gbujak.kanalarz.KanalarzSerialization;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NullMarked;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Type;
@@ -15,14 +15,14 @@ import java.util.List;
 import java.util.Map;
 
 @Component
+@NullMarked
 public class TestSerialization implements KanalarzSerialization {
 
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new Jdk8Module());
 
-    @NotNull
     @Override
     public String serializeStepCalled(
-        @NotNull List<SerializeParameterInfo> parametersInfo,
+        List<SerializeParameterInfo> parametersInfo,
         @Nullable SerializeReturnInfo returnInfo
     ) {
         var serialized = mapper.createObjectNode();
@@ -47,15 +47,14 @@ public class TestSerialization implements KanalarzSerialization {
             serialized.set("returnInfo", result);
         }
 
-        return serialized.toPrettyString();
+        return serialized.toString();
     }
 
-    @NotNull
     @Override
     public DeserializeParametersResult deserializeParameters(
-        @NotNull String serialized,
-        @NotNull List<DeserializeParameterInfo> parametersInfo,
-        @NotNull Type returnType
+        String serialized,
+        List<DeserializeParameterInfo> parametersInfo,
+        Type returnType
     ) {
         JsonNode tree;
         try {
@@ -107,7 +106,7 @@ public class TestSerialization implements KanalarzSerialization {
     }
 
     @Override
-    public boolean parametersAreEqualIgnoringReturn(@NotNull String left, @NotNull String right) {
+    public boolean parametersAreEqualIgnoringReturn(String left, String right) {
         try {
             return mapper.readTree(left).get("params")
                 .equals(mapper.readTree(right).get("params"));

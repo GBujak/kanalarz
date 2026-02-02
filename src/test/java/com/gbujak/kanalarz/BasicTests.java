@@ -98,12 +98,6 @@ public class BasicTests {
     }
 
     @Test
-    void stepOutsideOfContext() {
-        assertThat(testSteps.setName("test")).isEqualTo(Optional.empty());
-        assertThat(testNameService.name()).isEqualTo("test");
-    }
-
-    @Test
     void basicRollforward() {
         assertThat(testNameService.name()).isNull();
         kanalarz.newContext().consume(ctx ->
@@ -131,7 +125,7 @@ public class BasicTests {
             .hasCause(exception);
 
         assertThat(testNameService.name()).isNull();
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId)).hasSize(2);
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId)).hasSize(2);
     }
 
     @Test
@@ -152,7 +146,7 @@ public class BasicTests {
             .hasCauseExactlyInstanceOf(TestNameService.NameServiceNameAlreadyThatValueException.class);
 
         assertThat(testNameService.name()).isNull();
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId)).hasSize(3);
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId)).hasSize(3);
     }
 
     @Test
@@ -179,7 +173,7 @@ public class BasicTests {
             .hasCauseExactlyInstanceOf(TestNameService.NameServiceNameAlreadyThatValueException.class);
 
         assertThat(testNameService.name()).isNull();
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId)).hasSize(9);
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId)).hasSize(9);
     }
 
     @Test
@@ -195,7 +189,7 @@ public class BasicTests {
         });
 
         assertThat(testNameService.name()).isEqualTo(testNewName);
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(2);
     }
 
@@ -225,7 +219,7 @@ public class BasicTests {
             });
 
         assertThat(testNameService.name()).isEqualTo(testNewName2);
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(2);
     }
 
@@ -247,7 +241,7 @@ public class BasicTests {
             .hasCause(exception);
 
         assertThat(testNameService.name()).isEqualTo(testNewName2);
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(2);
     }
 
@@ -273,13 +267,13 @@ public class BasicTests {
             .hasCauseExactlyInstanceOf(TestNameService.NameServiceNameAlreadyThatValueException.class);
 
         assertThat(testNameService.name()).isEqualTo(testName2);
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(3);
 
         kanalarz.newContext().resumes(contextId).rollbackNow();
 
         assertThat(testNameService.name()).isNull();
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(5);
     }
 }

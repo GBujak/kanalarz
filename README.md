@@ -1,6 +1,6 @@
 # Kanalarz
 
-Simple Spring library for persistent atomic jobs made of steps with rollbacks. 
+Simple Spring library for persistent atomic jobs made of steps with rollbacks.
 
 <https://central.sonatype.com/artifact/com.gbujak/kanalarz>
 
@@ -8,99 +8,106 @@ Simple Spring library for persistent atomic jobs made of steps with rollbacks.
 <dependency>
     <groupId>com.gbujak</groupId>
     <artifactId>kanalarz</artifactId>
-    <version>3.1.0</version>
+    <version>4.0.0</version>
 </dependency>
 ```
 
 [![javadoc](https://javadoc.io/badge2/com.gbujak/kanalarz/javadoc.svg)](https://javadoc.io/doc/com.gbujak/kanalarz)
 
-You write the steps with rollbacks, write a job that calls these steps, and
-calling the rollbacks in case of a failure in the right order is handled
-automatically. 
+You define step methods with rollback handlers, then run pipelines that call
+those steps. If a pipeline fails, Kanalarz executes rollbacks automatically in
+the correct order.
 
-This library stores all the pipeline information using an interface that you
-implement. This interface can save the pipeline information to the database
-allowing you to resume and/or rollback the pipelines even if the java process
-is killed in the middle of the pipeline.
+Pipeline state is persisted through interfaces you implement. This allows resume
+replay and rollback even if the JVM process dies mid-pipeline.
 
 [Definition here](src/main/java/com/gbujak/kanalarz/KanalarzPersistence.java)
 
 **As a side effect, the persisted data will be a log of every step ever
 executed, including parameters and return values.**
 
-This library uses the Spring Framework BeanPostProcessor mechanism, similar to
-Spring's `@Transactional`. (Watch out - when calling
-steps through `this` you must self-inject like with `@Transactional`)
+Kanalarz uses Spring `BeanPostProcessor`, similarly to `@Transactional`.
+When calling steps inside the same class self inject to avoid skipping the spring proxy!
 
-You can inject rollforward step parameters and return values in rollback steps.
-The typesafety is validated when the spring context is starting. Any difference
-in type of nullability will cause the context creation to fail.
+You can inject rollforward parameters and outputs into rollback methods.
+Type safety is validated during Spring context startup. Any difference
+in nullability will cause the context creation to fail.
 
-This library determines the nullability by checking the most popular Java
-annotations (including `@Nullmarked` on the package and on the class). Kotlin
+Nullability is inferred from Java annotations (including `@NullMarked` on package/class). Kotlin
 nullability is checked using the `org.jetbrains.kotlin:kotlin-reflect` library.
 
-# Quick start
+## Why Kanalarz
 
-1. You `@Import` the `KanalarzConfiguration` class
-2. You implement a KanalarzPersistence bean. [In-memory implementation for tests is here.](https://github.com/GBujak/kanalarz/blob/master/src/test/java/com/gbujak/kanalarz/testimplementations/TestPersistence.java)
-3. You implement a KanalarzSerialization bean. [Example Jackson-based implementation is here.](https://github.com/GBujak/kanalarz/blob/master/src/test/java/com/gbujak/kanalarz/testimplementations/TestSerialization.java)
-4. You inject a `Kanalarz` bean provided by this library's Configuration.
+Kanalarz is for orchestrating side effects where DB transaction is not
+enough (like when calling external services). It is not an alternative to
+`@Transactional`.
+
+It lets you write procedural Java/Kotlin code, annotate steps and rollbacks,
+and get durable saga-like orchestration with strict replay for little effort.
+
+## Quick start
+
+1. `@Import(KanalarzConfiguration.class)`.
+2. Implement `KanalarzPersistence`. [Test implementation](https://github.com/GBujak/kanalarz/blob/master/src/test/java/com/gbujak/kanalarz/testimplementations/TestPersistence.java)
+3. Implement `KanalarzSerialization`. [Test implementation](https://github.com/GBujak/kanalarz/blob/master/src/test/java/com/gbujak/kanalarz/testimplementations/TestSerialization.java)
+4. Inject `Kanalarz` and execute pipelines via `newContext()...`.
 
 ```java
+// Example Kanalarz step holding bean
 @Component 
-@StepsHolder("test-steps") 
-class TestSteps {
+@StepsHolder("account-steps") 
+class AccountSteps {
 
-    @Autowired private TestNameService testNameService;
+    @Autowired private AccountService accountService;
 
     @NonNull
     @Step("set-name")
     public Optional<String> setName(String newName) {
-        return Optional.ofNullable(testNameService.set(newName));
+        // returns previous value
+        return Optional.ofNullable(accountService.setName(newName));
     }
 
     @Rollback("set-name")
-    public void setNameRollback(
-        String newName, // <-- determined by the name of the parameter
+    public void rollbackSetName(
+        String newName, // matched by name
         @NonNull @RollforwardOut Optional<String> originalName
     ) {
-        testNameService.set(originalName.orElse(null));
+        accountService.setName(originalName.orElse(null));
     } 
 }
 ```
 
-Using the steps inside of a pipeline:
+Using the steps inside a pipeline:
 
 ```java
-var testNewName = "test";
-var exception = new RuntimeException("test");
+var contextId = UUID.randomUUID();
+var crash = new RuntimeException("boom");
 
 assertThatThrownBy(() ->
-    kanalarz.newContext().consume(ctx -> {
-        testSteps.setName(testNewName);
-        assertThat(testNameService.name()).isEqualTo(testNewName);
-        throw exception;
+    kanalarz.newContext().resumes(contextId).consume(ctx -> {
+        accountSteps.setName("alice");
+        assertThat(accountService.name()).isEqualTo("alice");
+
+        // anything thrown in a context triggers rollback
+        throw crash;
     })
 )
     .isExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
-    .hasCause(exception);
+    .hasCause(crash);
 
-assertThat(testNameService.name()).isNull(); // rollback was ran
+assertThat(accountService.name()).isNull(); // rollback executed
 ```
 
 ### Example of a resumed context
 
 ```java
-var testNewName = "test"; 
-var testNewName2 = "test2"; 
 var contextId = UUID.randomUUID();
 
-assertThat(testNameService.name()).isNull();
+assertThat(accountService.name()).isNull();
 
 kanalarz.newContext().resumes(contextId).consume(ctx -> {
-    testSteps.setName(testNewName);
-    testSteps.setName(testNewName2);
+    accountSteps.setName("alice");
+    accountSteps.setName("bob");
 });
 
 // Java process could be killed here, nothing 
@@ -108,96 +115,175 @@ kanalarz.newContext().resumes(contextId).consume(ctx -> {
         
 assertThatThrownBy(() ->
     kanalarz.newContext().resumes(contextId).consume(ctx -> {
-        testSteps.setName(testNewName);
-        testSteps.setName(testNewName2);
+        accountSteps.setName("alice");
+        accountSteps.setName("bob");
 
-        // test service throws error when trying to set the same value again
-        testSteps.setName(testNewName2); 
+        // fails: trying to set the same value again
+        accountSteps.setName("bob"); 
     })
 )
     .isExactlyInstanceOf(KanalarzException.KanalarzStepFailedException.class)
-    .hasCauseExactlyInstanceOf(TestNameService.NameServiceNameAlreadyThatValueException.class);
+    .hasCauseExactlyInstanceOf(AccountService.NameAlreadySetException.class);
 
 // rollbacks from the initial pipeline were also called
-assertThat(testNameService.name()).isNull();
-assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId)).hasSize(9);
+assertThat(accountService.name()).isNull();
+assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId)).hasSize(9);
 ```
 
 [See more examples here](src/test/java/com/gbujak/kanalarz/BasicTests.java)
-
 
 [Or in Kotlin](src/test/java/com/gbujak/kanalarz/BasicTestsKotlin.kt)
 
 ## Concurrency
 
-The library fully supports executing steps concurrently.
+The library supports concurrent step execution.
 
-Rollbacks will happen sequentially based on the time each step finished
-executing.
+Rollbacks run sequentially in reverse completion order.
 
-Concurrent [resume replay](#resume-replay) is supported but out of order replay
-must be enabled when starting the pipeline or Kanalarz will throw an exception
-when steps are executed in non-deterministic order.
+Use `Kanalarz.forkJoin(...)` or `Kanalarz.forkConsume(...)` inside a pipeline.
+Kanalarz propagates pipeline context to each forked task and assigns each task a
+stable execution path. During resume replay, those execution paths are used to
+match previously executed steps.
 
 [Concurrent examples here.](src/test/java/com/gbujak/kanalarz/ConcurrentTests.java)
 
 ## Nested steps
 
-The library allows you to arbitrarily nest steps. The rollback of the parent is
-called **before** any of the rollbacks of the children. Parent steps with
+The library allows arbitrarily nested steps and contexts. The rollback of the parent is
+called **after** any of the rollbacks of the children. Parent steps with
 rollbacks are not recommended.
 
 ## Resume replay
 
-The library allows you to "resume replay" the pipelines. The code outside of the
-steps will be ran again but the steps will return the value from the previous
-run, allowing you to resume the whole pipeline from an arbitrary point.
+Resume replay reruns pipeline code outside of step methods, 
+while steps aren't executed, but immediately return
+persisted results from the previous runs.
 
-**Note: pipelines are only safe to resume replay when the don't have any
+**Note: pipelines are only safe to resume replay when they don't have any
 side-effects outside of steps.**
 
-Nested steps are fully supported for resume replay.
+Nested steps are fully supported for resume replay, including nested contexts
+and fork-join tasks.
 
-There are multiple setting you can use to determine how the library will handle
-steps that are executed in a different order than in the original run of the
-pipeline. 
+Resume replay is strict:
 
-You can choose to ignore the non-replayed steps, rollback only them leaving the
-rest commited, or fail the entire pipeline and rollback everything if any
-non-replayed steps remain at the end of the pipeline.
+1. A replayed step must match the previously persisted step at the same execution path.
+2. Step identifier and serialized arguments must match.
+3. If a new step starts before all persisted steps for that replay segment are replayed, replay fails with
+   `KanalarzNewStepBeforeReplayEndedException`.
+4. If replay ends while persisted steps are still unreplayed, replay fails with
+   `KanalarzNotAllStepsReplayedException`.
+
+If a previously persisted step was marked as failed, Kanalarz reruns that step
+instead of replaying a cached return.
 
 [Pipeline configuration option docs](https://javadoc.io/doc/com.gbujak/kanalarz/latest/com/gbujak/kanalarz/Kanalarz.Option.html)
 
 ```java 
 UUID contextId = UUID.randomUUID(); 
-var exception = new RuntimeException();
+var crash = new RuntimeException("boom");
 
 assertThatThrownBy(() ->
     kanalarz.newContext()
         .resumes(contextId)
         .option(Kanalarz.Option.DEFER_ROLLBACK)
         .consume(ctx -> {
-            assertThat(steps.add("test-1")).isEqualTo(List.of("test-1"));
-            assertThat(steps.add("test-2")).isEqualTo(List.of("test-1", "test-2"));
-            throw exception;
+            assertThat(steps.add("first")).isEqualTo(List.of("first"));
+            assertThat(steps.add("second")).isEqualTo(List.of("first", "second"));
+            throw crash;
         })
 )
     .isExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
-    .hasCause(exception);
+    .hasCause(crash);
 
-assertThat(service.getMessages()).isEqualTo(List.of("test-1", "test-2"));
+assertThat(service.getMessages()).isEqualTo(List.of("first", "second"));
 
 kanalarz.newContext()
     .resumes(contextId)
     .consumeResumeReplay(ctx -> {
-        assertThat(steps.add("test-1")).isEqualTo(List.of("test-1")); // replayed
-        assertThat(steps.add("test-2")).isEqualTo(List.of("test-1", "test-2")); // replayed
+        // replayed from previous execution (step body not re-run)
+        assertThat(steps.add("first")).isEqualTo(List.of("first"));
+        assertThat(steps.add("second")).isEqualTo(List.of("first", "second"));
 
-        assertThat(steps.add("test-3")).isEqualTo(List.of("test-1", "test-2", "test-3")); // real
-        assertThat(steps.add("test-3")).isEqualTo(List.of("test-1", "test-2", "test-3", "test-3")); // real
+        // new steps run normally after replay is fully drained
+        assertThat(steps.add("third")).isEqualTo(List.of("first", "second", "third"));
+        assertThat(steps.add("third")).isEqualTo(List.of("first", "second", "third", "third"));
     });
 
-assertThat(service.getMessages()).isEqualTo(List.of("test-1", "test-2", "test-3", "test-3"));
+assertThat(service.getMessages()).isEqualTo(List.of("first", "second", "third", "third"));
 ```
 
 [See more examples here](src/test/java/com/gbujak/kanalarz/ResumeReplayTests.java)
+
+## Advanced features
+
+### Parallelism model
+
+Parallelism is explicit and context-aware:
+
+1. Use `forkJoin(List<X>, Function<X,Y>)` to run parallel tasks and collect results.
+2. Use `forkConsume(List<X>, Consumer<X>)` for fire-and-wait side effect tasks.
+3. Use overloads with `maxParallelism` to limit running virtual threads.
+
+Important semantics:
+
+1. Forked tasks inherit the Kanalarz context automatically.
+2. `forkJoin` preserves input order in its returned list, regardless of task completion order.
+3. Each forked task receives its own execution-path branch; resume replay matches by those paths.
+4. To replay parallel sections, rerun logically equivalent fork structure and step calls.
+5. Rollback remains sequential after failure.
+
+[Concurrent examples here.](src/test/java/com/gbujak/kanalarz/ConcurrentTests.java)
+
+### Deferred rollback
+
+Use `DEFER_ROLLBACK` when you want to decide rollback timing explicitly.
+
+```java
+var contextId = UUID.randomUUID();
+
+assertThatThrownBy(() ->
+    kanalarz.newContext()
+        .resumes(contextId)
+        .option(Kanalarz.Option.DEFER_ROLLBACK)
+        .consume(ctx -> {
+            steps.add("created");
+            throw new RuntimeException("fail");
+        })
+);
+
+// rollback can be triggered later
+kanalarz.newContext().resumes(contextId).rollbackNow();
+```
+
+### Rollback failure strategy
+
+If rollback already failed for some steps, choose one strategy:
+
+1. `RETRY_FAILED_ROLLBACKS` to attempt those rollback steps again.
+2. `SKIP_FAILED_ROLLBACKS` to skip them.
+3. `ALL_ROLLBACK_STEPS_FALLIBLE` to continue rollback even when rollback steps throw.
+
+[Example here.](src/test/java/com/gbujak/kanalarz/RetryRollbackTest.java)
+
+### Cancellation
+
+You can cancel a running context from another thread:
+
+1. `Kanalarz.cancelContext(contextId)` keeps normal rollback behavior.
+2. `Kanalarz.cancelContextForceDeferRollback(contextId)` forces deferred rollback.
+
+[Examples here.](src/test/java/com/gbujak/kanalarz/CancellingTests.java)
+
+### Nested contexts and replay isolation
+
+Subcontexts maintain independent timelines and can be replayed independently
+(including subcontexts started from fork-join branches).
+
+[Examples here.](src/test/java/com/gbujak/kanalarz/NestedContextsTests.java)
+
+### Fallible steps
+
+Use `@Step(fallible = true)` and return `StepOut<T>` to automatically catch exceptions from steps.
+
+[Examples here.](src/test/java/com/gbujak/kanalarz/BasicTests.java)

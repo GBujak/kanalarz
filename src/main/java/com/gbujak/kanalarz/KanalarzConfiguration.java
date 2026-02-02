@@ -4,8 +4,14 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Spring configuration that registers Kanalarz core beans.
+ */
 @Configuration
 public class KanalarzConfiguration {
+
+    /** Create configuration instance. */
+    public KanalarzConfiguration() { }
 
     @Bean
     static KanalarzStepsRegistry kanalarzStepsRegistry() {

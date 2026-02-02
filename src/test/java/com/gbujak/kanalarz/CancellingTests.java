@@ -12,8 +12,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -72,7 +74,7 @@ public class CancellingTests {
 
     @Test
     void shouldFailToCancelNotRunning() {
-        assertThatThrownBy(() -> kanalarz.cancelContext(UUID.randomUUID()))
+        assertThatThrownBy(() -> Kanalarz.cancelContext(UUID.randomUUID()))
             .isExactlyInstanceOf(IllegalStateException.class);
     }
 
@@ -89,8 +91,8 @@ public class CancellingTests {
 
         Thread.sleep(100);
 
-        kanalarz.cancelContext(contextId);
-        assertThatThrownBy(() -> kanalarz.cancelContext(contextId))
+        Kanalarz.cancelContext(contextId);
+        assertThatThrownBy(() -> Kanalarz.cancelContext(contextId))
             .isExactlyInstanceOf(IllegalStateException.class);
 
         service.lock.unlock();
@@ -113,7 +115,7 @@ public class CancellingTests {
 
             assertThat(service.value).isEqualTo("test");
 
-            kanalarz.cancelContext(contextId);
+            Kanalarz.cancelContext(contextId);
             service.lock.unlock();
 
             assertThatThrownBy(result::get)
@@ -121,8 +123,41 @@ public class CancellingTests {
                 .hasCauseExactlyInstanceOf(KanalarzException.KanalarzContextCancelledException.class);
 
             assertThat(service.value).isNull();
-            assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
                 .hasSize(2);
+        }
+    }
+
+    @Test
+    void shouldCancelForkedTaskCreatedBeforeCancellation() throws InterruptedException {
+        var contextId = UUID.randomUUID();
+        var workerReady = new CountDownLatch(1);
+        var releaseWorker = new CountDownLatch(1);
+
+        try (var x = Executors.newVirtualThreadPerTaskExecutor()) {
+            var result = x.submit(() -> {
+                kanalarz.newContext().resumes(contextId).consume(ctx -> {
+                    Kanalarz.forkConsume(java.util.List.of(1), i -> {
+                        workerReady.countDown();
+                        try {
+                            releaseWorker.await();
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                        steps.setValue("forked");
+                    });
+                });
+            });
+
+            assertThat(workerReady.await(5, TimeUnit.SECONDS)).isTrue();
+
+            Kanalarz.cancelContext(contextId);
+            releaseWorker.countDown();
+
+            assertThatThrownBy(result::get)
+                .isExactlyInstanceOf(ExecutionException.class)
+                .hasRootCauseExactlyInstanceOf(KanalarzException.KanalarzContextCancelledException.class);
+            assertThat(service.value).isNull();
         }
     }
 
@@ -144,7 +179,7 @@ public class CancellingTests {
 
             assertThat(service.value).isEqualTo("test");
 
-            kanalarz.cancelContext(contextId);
+            Kanalarz.cancelContext(contextId);
             service.lock.unlock();
 
             assertThatThrownBy(result::get)
@@ -152,13 +187,13 @@ public class CancellingTests {
                 .hasCauseExactlyInstanceOf(KanalarzException.KanalarzContextCancelledException.class);
 
             assertThat(service.value).isEqualTo("test");
-            assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
                 .hasSize(1);
 
             kanalarz.newContext().resumes(contextId).rollbackNow();
 
             assertThat(service.value).isNull();
-            assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
                 .hasSize(2);
         }
     }
@@ -180,7 +215,7 @@ public class CancellingTests {
 
             assertThat(service.value).isEqualTo("test");
 
-            kanalarz.cancelContextForceDeferRollback(contextId);
+            Kanalarz.cancelContextForceDeferRollback(contextId);
             service.lock.unlock();
 
             assertThatThrownBy(result::get)
@@ -188,13 +223,13 @@ public class CancellingTests {
                 .hasCauseExactlyInstanceOf(KanalarzException.KanalarzContextCancelledException.class);
 
             assertThat(service.value).isEqualTo("test");
-            assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
                 .hasSize(1);
 
             kanalarz.newContext().resumes(contextId).rollbackNow();
 
             assertThat(service.value).isNull();
-            assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
                 .hasSize(2);
         }
     }
@@ -217,7 +252,7 @@ public class CancellingTests {
 
             assertThat(service.value).isEqualTo("test");
 
-            kanalarz.cancelContextForceDeferRollback(contextId);
+            Kanalarz.cancelContextForceDeferRollback(contextId);
             service.lock.unlock();
 
             assertThatThrownBy(result::get)
@@ -225,13 +260,13 @@ public class CancellingTests {
                 .hasCauseExactlyInstanceOf(KanalarzException.KanalarzContextCancelledException.class);
 
             assertThat(service.value).isEqualTo("test");
-            assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
                 .hasSize(1);
 
             kanalarz.newContext().resumes(contextId).rollbackNow();
 
             assertThat(service.value).isNull();
-            assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+            assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
                 .hasSize(2);
         }
     }
