@@ -5,17 +5,18 @@ import com.gbujak.kanalarz.annotations.RollbackOnly;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
 import org.aopalliance.intercept.MethodInvocation;
-import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.NullUnmarked;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -25,9 +26,11 @@ import java.util.stream.Stream;
 @NullMarked
 public class Kanalarz {
 
-    private final ConcurrentHashMap<UUID, CancellableContextState>
-        cancellableContexts = new ConcurrentHashMap<>();
+    private static final AtomicInteger activeContexts = new AtomicInteger();
+    private static final ThreadLocal<@Nullable ContextStack> kanalarzContextThreadLocal = new ThreadLocal<>();
+    private static final ExecutorService noContextExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
+    private final ConcurrentHashMap<UUID, CancellableContextState> cancellableContexts = new ConcurrentHashMap<>();
     enum CancellableContextState {
         CANCELLABLE,
         CANCELLED,
@@ -48,16 +51,14 @@ public class Kanalarz {
         this.persistance = persistance;
     }
 
-    private static final AtomicInteger activeContexts = new AtomicInteger();
-    private static final ThreadLocal<@Nullable KanalarzContext>
-        kanalarzContextThreadLocal = new InheritableThreadLocal<>();
+    public record ContextStack(KanalarzContext context, @Nullable ContextStack parents) {}
 
     /**
      * Get current pipeline context
      * @return current pipeline context or null if not in a pipeline context
      */
     @Nullable
-    public static KanalarzContext context() {
+    public static ContextStack contextStackOrNull() {
         return kanalarzContextThreadLocal.get();
     }
 
@@ -65,8 +66,8 @@ public class Kanalarz {
      * Get current pipeline context
      * @return current pipeline context or empty Optional if not in a context
      */
-    public static Optional<KanalarzContext> contextOpt() {
-        return (Optional<@NonNull KanalarzContext>) Optional.ofNullable(kanalarzContextThreadLocal.get());
+    public static Optional<ContextStack> contextStack() {
+        return (Optional<ContextStack>) Optional.ofNullable(kanalarzContextThreadLocal.get());
     }
 
     /**
@@ -74,8 +75,8 @@ public class Kanalarz {
      * @return current pipeline context
      * @throws IllegalStateException if not in a pipeline context
      */
-    public static KanalarzContext contextOrThrow() {
-        return contextOpt()
+    public static ContextStack contextStackOrThrow() {
+        return contextStack()
             .orElseThrow(() -> new IllegalStateException("Not within a context"));
     }
 
@@ -99,8 +100,8 @@ public class Kanalarz {
             );
         }
 
-        var context = context();
-        if (context == null) {
+        var contextStack = contextStackOrNull();
+        if (contextStack == null) {
             if (rollbackOnly != null) {
                 return Utils.voidOrUnitValue(invocation.getMethod().getGenericReturnType());
             }
@@ -118,7 +119,7 @@ public class Kanalarz {
             }
         }
 
-        return context.withStepId(
+        return contextStack.context().withNewStep(
             stepStack -> handleInContextMethodExecution(
                 target,
                 method,
@@ -128,7 +129,7 @@ public class Kanalarz {
                 rollbackOnly,
                 stepStack.current(),
                 stepStack.parentStepId(),
-                context
+                contextStack.context()
             )
         );
     }
@@ -306,13 +307,6 @@ public class Kanalarz {
         EnumSet<Option> options,
         boolean resumeReplay
     ) {
-        KanalarzContext previous = kanalarzContextThreadLocal.get();
-        if (previous != null) {
-            throw new KanalarzException.KanalarzIllegalUsageException(
-                "Nested kanalarz context [" + previous.getId() + "] with metadata " + previous.fullMetadata()
-            );
-        }
-
         if (resumeReplay && resumesContext == null) {
             throw new KanalarzException.KanalarzIllegalUsageException(
                 "Resume replay only makes sense when resuming some context! " +
@@ -512,7 +506,7 @@ public class Kanalarz {
                 }
             }
 
-            context.withStepId(stepStack -> {
+            context.withNewStep(stepStack -> {
 
                 var serializedParameters = serialization.serializeStepCalled(
                     Utils.makeSerializeParametersInfo(parameters, rollback),
@@ -801,6 +795,7 @@ public class Kanalarz {
 
         private final KanalarzContext context;
         private final @Nullable UUID newContextId;
+        private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
         AutoCloseableContext(
             Map<String, String> metadata,
@@ -811,15 +806,15 @@ public class Kanalarz {
             context = new KanalarzContext(
                 resumesContext,
                 options,
-                stepReplayer
+                stepReplayer,
+                executor
             );
             newContextId = context.getId();
             context.putAllMetadata(metadata);
-            kanalarzContextThreadLocal.set(context);
+            kanalarzContextThreadLocal.set(new ContextStack(context, kanalarzContextThreadLocal.get()));
             activeContexts.incrementAndGet();
             cancellableContexts.put(newContextId, CancellableContextState.CANCELLABLE);
         }
-
 
         public KanalarzContext context() {
             return Objects.requireNonNull(context);
@@ -827,12 +822,38 @@ public class Kanalarz {
 
         @Override
         public void close() {
-            kanalarzContextThreadLocal.remove();
+            kanalarzContextThreadLocal.set(
+                Optional.ofNullable(kanalarzContextThreadLocal.get())
+                    .map(ContextStack::parents)
+                    .orElse(null)
+            );
             activeContexts.decrementAndGet();
             if (newContextId != null) {
                 cancellableContexts.remove(newContextId);
             }
+            executor.close();
         }
+    }
+
+    @NullUnmarked
+    public static <T> CompletableFuture<T> forkVirtual(Supplier<T> block) {
+        var contextStack = contextStack();
+        var executor = contextStack.map(it -> it.context().executor()).orElse(noContextExecutor);
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                kanalarzContextThreadLocal.set(contextStack.orElse(null));
+                return block.get();
+            } finally {
+                kanalarzContextThreadLocal.remove();
+            }
+        }, executor);
+    }
+
+    public static CompletableFuture<@Nullable Void> forkRunVirtual(Runnable block) {
+        return forkVirtual(() -> {
+            block.run();
+            return null;
+        });
     }
 
     /**

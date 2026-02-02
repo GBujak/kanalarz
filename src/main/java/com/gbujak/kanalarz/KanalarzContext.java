@@ -5,7 +5,8 @@ import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 @NullMarked
@@ -14,6 +15,7 @@ public class KanalarzContext {
     private final UUID id;
     private final EnumSet<Kanalarz.Option> options;
     private final Map<String, String> metadata = new ConcurrentHashMap<>();
+    private final ExecutorService executor;
 
     public record StepStack(UUID current, @Nullable StepStack parents) {
 
@@ -22,7 +24,7 @@ public class KanalarzContext {
             return parents == null ? null : parents.current();
         }
     }
-    private final ThreadLocal<@Nullable StepStack> stepStack = new InheritableThreadLocal<>();
+    private final ThreadLocal<@Nullable StepStack> stepStack = new ThreadLocal<>();
 
     @Nullable
     private KanalarzStepReplayer stepReplayer;
@@ -30,13 +32,14 @@ public class KanalarzContext {
     KanalarzContext(
         @Nullable UUID resumesId,
         EnumSet<Kanalarz.Option> options,
-        @Nullable KanalarzStepReplayer stepReplayer
+        @Nullable KanalarzStepReplayer stepReplayer,
+        ExecutorService executor
     ) {
         this.id = resumesId != null ? resumesId : UUID.randomUUID();
         this.options = options;
         this.stepReplayer = stepReplayer;
+        this.executor = executor;
     }
-
 
     public UUID getId() {
         return id;
@@ -94,7 +97,7 @@ public class KanalarzContext {
         return options.contains(option);
     }
 
-    <T extends @Nullable Object> T withStepId(Function<StepStack, T> block) {
+    <T extends @Nullable Object> T withNewStep(Function<StepStack, T> block) {
         stepStack.set(new StepStack(UUID.randomUUID(), stepStack.get()));
         try {
             return block.apply(Objects.requireNonNull(
@@ -109,5 +112,9 @@ public class KanalarzContext {
                 ).parents()
             );
         }
+    }
+
+    ExecutorService executor() {
+        return this.executor;
     }
 }
