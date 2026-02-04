@@ -1,5 +1,6 @@
 package com.gbujak.kanalarz;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gbujak.kanalarz.annotations.Rollback;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
@@ -15,11 +16,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
@@ -82,9 +85,12 @@ class ConcurrentTestSteps {
 
     @Step("add-all-concurrently")
     void addAllConcurrently(List<Integer> values) {
+        List<CompletableFuture<?>> futures = new ArrayList<>(values.size());
         for (var value : values) {
-            Kanalarz.forkRunVirtual(() -> self.add(value));
+            futures.add(Kanalarz.forkRunVirtual(() -> self.add(value)));
+//            self.add(value);
         }
+        futures.forEach(CompletableFuture::join);
     }
 }
 
@@ -129,9 +135,9 @@ public class ConcurrentTests {
                     }
                 }));
             }
+            futures.forEach(CompletableFuture::join);
         });
 
-        futures.forEach(CompletableFuture::join);
 
         assertThat(service.value).isEqualTo(sum.get());
         assertThat(service.valueHistory.getLast()).isEqualTo(sum.get());
@@ -160,8 +166,9 @@ public class ConcurrentTests {
         List<Executed> executed = Collections.synchronizedList(new ArrayList<>());
 
         Consumer<KanalarzContext> job = ctx -> {
+            List<CompletableFuture<?>> futures = new ArrayList<>();
             for (int j = 0; j < 50; j++) {
-                Kanalarz.forkRunVirtual(() -> {
+                futures.add(Kanalarz.forkRunVirtual(() -> {
                     if (Math.random() < .2) {
                         int value = (int) Math.floor(Math.random() * 100);
                         executed.add(new Executed.AddedOne(value));
@@ -179,35 +186,42 @@ public class ConcurrentTests {
                         stepsRan.addAndGet(values.size());
                         nestedStepsRan.addAndGet(1);
                     }
-                });
+                }));
             }
+            futures.forEach(CompletableFuture::join);
         };
 
         kanalarz.newContext().resumes(contextId).consume(job);
 
         var sumAfterFirstRun = sum.get();
+        var calcedSum = executed.stream().flatMap(it -> switch (it) {
+            case Executed.AddedOne(int v) -> Stream.of(v);
+            case Executed.AddedMany(List<Integer> v) -> v.stream();
+        }).mapToInt(it -> it).sum();
 
+        assertThat(sumAfterFirstRun).isEqualTo(calcedSum);
         assertThat(service.value).isEqualTo(sumAfterFirstRun);
         assertThat(service.valueHistory.getLast()).isEqualTo(sumAfterFirstRun);
 
-
         Consumer<KanalarzContext> resumeReplayJob = ctx -> {
+            List<CompletableFuture<?>> futures = new ArrayList<>();
             for (var ex : executed) {
-                Kanalarz.forkRunVirtual(() -> {
+                futures.add(Kanalarz.forkRunVirtual(() -> {
                     switch (ex) {
                         case Executed.AddedOne(int value) ->
                             steps.add(value);
                         case Executed.AddedMany(List<Integer> value) ->
                             steps.addAllConcurrently(value);
                     }
-                });
+                }));
             }
-
+            futures.forEach(CompletableFuture::join);
             job.accept(ctx);
         };
 
         kanalarz.newContext().resumes(contextId)
             .option(Kanalarz.Option.OUT_OF_ORDER_REPLAY)
+            .option(Kanalarz.Option.NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED)
             .consumeResumeReplay(resumeReplayJob);
 
         assertThat(sum.get()).isGreaterThan(sumAfterFirstRun);

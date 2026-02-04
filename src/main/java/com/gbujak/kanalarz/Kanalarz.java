@@ -795,7 +795,6 @@ public class Kanalarz {
 
         private final KanalarzContext context;
         private final @Nullable UUID newContextId;
-        private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
         AutoCloseableContext(
             Map<String, String> metadata,
@@ -806,8 +805,7 @@ public class Kanalarz {
             context = new KanalarzContext(
                 resumesContext,
                 options,
-                stepReplayer,
-                executor
+                stepReplayer
             );
             newContextId = context.getId();
             context.putAllMetadata(metadata);
@@ -822,6 +820,8 @@ public class Kanalarz {
 
         @Override
         public void close() {
+            System.out.println("CLOSING CONTEXT");
+            System.out.println("CLOSED");
             kanalarzContextThreadLocal.set(
                 Optional.ofNullable(kanalarzContextThreadLocal.get())
                     .map(ContextStack::parents)
@@ -831,14 +831,12 @@ public class Kanalarz {
             if (newContextId != null) {
                 cancellableContexts.remove(newContextId);
             }
-            executor.close();
         }
     }
 
     @NullUnmarked
     public static <T> CompletableFuture<T> forkVirtual(Supplier<T> block) {
         var contextStack = contextStack();
-        var executor = contextStack.map(it -> it.context().executor()).orElse(noContextExecutor);
         return CompletableFuture.supplyAsync(() -> {
             try {
                 kanalarzContextThreadLocal.set(contextStack.orElse(null));
@@ -846,7 +844,7 @@ public class Kanalarz {
             } finally {
                 kanalarzContextThreadLocal.remove();
             }
-        }, executor);
+        }, noContextExecutor);
     }
 
     public static CompletableFuture<@Nullable Void> forkRunVirtual(Runnable block) {

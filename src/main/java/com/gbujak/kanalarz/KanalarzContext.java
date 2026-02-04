@@ -15,7 +15,6 @@ public class KanalarzContext {
     private final UUID id;
     private final EnumSet<Kanalarz.Option> options;
     private final Map<String, String> metadata = new ConcurrentHashMap<>();
-    private final ExecutorService executor;
 
     public record StepStack(UUID current, @Nullable StepStack parents) {
 
@@ -32,13 +31,11 @@ public class KanalarzContext {
     KanalarzContext(
         @Nullable UUID resumesId,
         EnumSet<Kanalarz.Option> options,
-        @Nullable KanalarzStepReplayer stepReplayer,
-        ExecutorService executor
+        @Nullable KanalarzStepReplayer stepReplayer
     ) {
         this.id = resumesId != null ? resumesId : UUID.randomUUID();
         this.options = options;
         this.stepReplayer = stepReplayer;
-        this.executor = executor;
     }
 
     public UUID getId() {
@@ -112,9 +109,5 @@ public class KanalarzContext {
                 ).parents()
             );
         }
-    }
-
-    ExecutorService executor() {
-        return this.executor;
     }
 }
