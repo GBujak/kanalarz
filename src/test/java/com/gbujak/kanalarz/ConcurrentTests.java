@@ -16,7 +16,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -88,7 +87,6 @@ class ConcurrentTestSteps {
         List<CompletableFuture<?>> futures = new ArrayList<>(values.size());
         for (var value : values) {
             futures.add(Kanalarz.forkRunVirtual(() -> self.add(value)));
-//            self.add(value);
         }
         futures.forEach(CompletableFuture::join);
     }
@@ -113,11 +111,10 @@ public class ConcurrentTests {
         var sum = new AtomicInteger(0);
         var stepsRan = new AtomicInteger(0);
         var nestedStepsRan = new AtomicInteger(0);
-        List<CompletableFuture<?>> futures = new ArrayList<>();
 
         kanalarz.newContext().resumes(contextId).consume(ctx -> {
             for (int i = 0; i < 100; i++) {
-                futures.add(Kanalarz.forkRunVirtual(() -> {
+                Kanalarz.forkRunVirtual(() -> {
                     if (Math.random() < .2) {
                         int value = (int) Math.floor(Math.random() * 100);
                         sum.addAndGet(value);
@@ -133,9 +130,8 @@ public class ConcurrentTests {
                         stepsRan.addAndGet(values.size());
                         nestedStepsRan.addAndGet(1);
                     }
-                }));
+                });
             }
-            futures.forEach(CompletableFuture::join);
         });
 
 
@@ -166,9 +162,8 @@ public class ConcurrentTests {
         List<Executed> executed = Collections.synchronizedList(new ArrayList<>());
 
         Consumer<KanalarzContext> job = ctx -> {
-            List<CompletableFuture<?>> futures = new ArrayList<>();
             for (int j = 0; j < 50; j++) {
-                futures.add(Kanalarz.forkRunVirtual(() -> {
+                Kanalarz.forkRunVirtual(() -> {
                     if (Math.random() < .2) {
                         int value = (int) Math.floor(Math.random() * 100);
                         executed.add(new Executed.AddedOne(value));
@@ -186,9 +181,8 @@ public class ConcurrentTests {
                         stepsRan.addAndGet(values.size());
                         nestedStepsRan.addAndGet(1);
                     }
-                }));
+                });
             }
-            futures.forEach(CompletableFuture::join);
         };
 
         kanalarz.newContext().resumes(contextId).consume(job);

@@ -1,6 +1,7 @@
 package com.gbujak.kanalarz;
 
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -29,9 +30,8 @@ public class StepOut<T> {
         return StepOut.ofNonNullOrThrow(value);
     }
 
-    public static <T> StepOut<T> ofNonNullOrThrow(@Nullable T value) {
-        Objects.requireNonNull(value);
-        return (StepOut<T>) new StepOut<>(value, null);
+    static <T> StepOut<T> ofNonNullOrThrow(@Nullable T value) {
+        return new StepOut<T>(Objects.requireNonNull(value), null);
     }
 
     public static <T> StepOut<Optional<T>> ofNullable(@Nullable T value) {
@@ -51,7 +51,7 @@ public class StepOut<T> {
     }
 
     public Optional<T> value() {
-        return (Optional<T>) Optional.ofNullable(value);
+        return Optional.ofNullable(value);
     }
 
     @Nullable
@@ -65,7 +65,7 @@ public class StepOut<T> {
     }
 
     public Optional<Throwable> error() {
-        return (Optional<Throwable>) Optional.ofNullable(error);
+        return Optional.ofNullable(error);
     }
 
     @Nullable

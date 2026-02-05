@@ -37,9 +37,11 @@ public class TestPersistence implements KanalarzPersistence {
         return stepCompletedEvents.stream()
             .filter(it -> it.contextId().equals(contextId))
             .map(it -> new StepExecutedInfo(
+                it.contextId(),
                 it.stepId(),
                 it.stepIdentifier(),
                 it.serializedExecutionResult(),
+                it.parentContextId(),
                 it.parentStepId(),
                 it.stepIsRollbackFor(),
                 it.failed()

@@ -103,12 +103,6 @@ class BasicTestsKotlin {
     }
 
     @Test
-    fun stepOutsideOfContext() {
-        assertThat(testSteps.setName("test")).isNull()
-        assertThat(testNameService.name()).isEqualTo("test")
-    }
-
-    @Test
     fun basicRollforward() {
         assertThat(testNameService.name()).isNull()
         kanalarz.newContext().start {

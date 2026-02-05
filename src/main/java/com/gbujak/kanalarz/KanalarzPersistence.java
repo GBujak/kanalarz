@@ -13,6 +13,7 @@ public interface KanalarzPersistence {
 
     record StepStartedEvent(
         UUID contextId,
+        Optional<UUID> parentContextId,
         UUID stepId,
         Optional<UUID> parentStepId,
         Optional<UUID> stepIsRollbackFor,
@@ -27,6 +28,7 @@ public interface KanalarzPersistence {
 
     record StepCompletedEvent(
         UUID contextId,
+        Optional<UUID> parentContextId,
         UUID stepId,
         Optional<UUID> parentStepId,
         Optional<UUID> stepIsRollbackFor,
@@ -40,12 +42,19 @@ public interface KanalarzPersistence {
     void stepCompleted(StepCompletedEvent stepCompletedEvent);
 
     record StepExecutedInfo(
+        UUID contextId,
         UUID stepId,
         String stepIdentifier,
         String serializedExecutionResult,
+        Optional<UUID> parentContextId,
         Optional<UUID> parentStepId,
         Optional<UUID> wasRollbackFor,
         boolean failed
     ) {}
+
+    /**
+     * Get a list of executed steps in the context with the given id, or within any nested contexts indide of that one.
+     * Sorted by the time the execution was completed, ascendingly.
+     */
     List<StepExecutedInfo> getExecutedStepsInContextInOrderOfExecution(UUID contextId);
 }

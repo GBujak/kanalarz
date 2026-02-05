@@ -1,6 +1,6 @@
 package com.gbujak.kanalarz;
 
-import com.gbujak.kanalarz.KanalarzStepReplayer.SearchResult;
+import com.gbujak.kanalarz.StepReplayer.SearchResult;
 import com.gbujak.kanalarz.annotations.RollbackOnly;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
@@ -28,7 +28,7 @@ public class Kanalarz {
 
     private static final AtomicInteger activeContexts = new AtomicInteger();
     private static final ThreadLocal<@Nullable ContextStack> kanalarzContextThreadLocal = new ThreadLocal<>();
-    private static final ExecutorService noContextExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    private static final ExecutorService forkExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     private final ConcurrentHashMap<UUID, CancellableContextState> cancellableContexts = new ConcurrentHashMap<>();
     enum CancellableContextState {
@@ -51,7 +51,36 @@ public class Kanalarz {
         this.persistance = persistance;
     }
 
-    public record ContextStack(KanalarzContext context, @Nullable ContextStack parents) {}
+    public record ContextStack(
+        KanalarzContext context,
+        @Nullable ContextStack parents
+    ) {
+
+        private ContextStack copy() {
+            return new ContextStack(context.copy(), parents != null ? parents.copy() : null);
+        }
+
+        private UUID contextId() {
+            return context.getId();
+        }
+
+        private Optional<UUID> parentContextId() {
+            return Optional.ofNullable(parents()).map(ContextStack::contextId);
+        }
+
+        private UUID stepIdOrThrow() {
+            return
+                Optional.ofNullable(context.stepStack())
+                    .orElseThrow(() -> new KanalarzException.KanalarzInternalError("No steps active!", null))
+                    .current();
+        }
+
+        private Optional<UUID> parentStepId() {
+            return Optional.ofNullable(context.stepStack())
+                .map(KanalarzContext.StepStack::parents)
+                .map(KanalarzContext.StepStack::current);
+        }
+    }
 
     /**
      * Get current pipeline context
@@ -67,7 +96,7 @@ public class Kanalarz {
      * @return current pipeline context or empty Optional if not in a context
      */
     public static Optional<ContextStack> contextStack() {
-        return (Optional<ContextStack>) Optional.ofNullable(kanalarzContextThreadLocal.get());
+        return Optional.ofNullable(kanalarzContextThreadLocal.get());
     }
 
     /**
@@ -76,8 +105,7 @@ public class Kanalarz {
      * @throws IllegalStateException if not in a pipeline context
      */
     public static ContextStack contextStackOrThrow() {
-        return contextStack()
-            .orElseThrow(() -> new IllegalStateException("Not within a context"));
+        return contextStack().orElseThrow(KanalarzException.KanalarzNoContextException::new);
     }
 
     @Nullable
@@ -100,24 +128,8 @@ public class Kanalarz {
             );
         }
 
-        var contextStack = contextStackOrNull();
-        if (contextStack == null) {
-            if (rollbackOnly != null) {
-                return Utils.voidOrUnitValue(invocation.getMethod().getGenericReturnType());
-            }
-
-            try {
-                return method.invoke(target, arguments);
-            } catch (InvocationTargetException error) {
-                if (step.fallible()) {
-                    return StepOut.err(error.getTargetException());
-                } else {
-                    throw new KanalarzException.KanalarzStepFailedException(error.getTargetException());
-                }
-            } catch (Throwable e) {
-                throw new KanalarzException.KanalarzInternalError(e.getMessage(), e);
-            }
-        }
+        var contextStack = contextStackOrThrow();
+        var stepIdentifier = step != null ? step.value() : rollbackOnly.value();
 
         return contextStack.context().withNewStep(
             stepStack -> handleInContextMethodExecution(
@@ -165,7 +177,7 @@ public class Kanalarz {
             stepIdentifier = KanalarzStepsRegistry.stepIdentifier(stepsHolder, rollbackOnly);
         } else {
             throw new KanalarzException.KanalarzInternalError(
-                "Handling invocation of a method that is both a step and a rollback-only marker!", null
+                "Handling invocation of a method that is neither a step nor a rollback-only marker!", null
             );
         }
 
@@ -175,7 +187,10 @@ public class Kanalarz {
         var serializedParameters = serialization.serializeStepCalled(serializeParametersInfo, null);
 
         if (stepReplayer != null) {
-            var foundStep = stepReplayer.findNextStep(stepIdentifier, serializedParameters);
+            var foundStep = stepReplayer.findNextStep(
+                stepIdentifier,
+                serializedParameters
+            );
 
             if (stepReplayer.isDone()) {
                 context.clearStepReplayer();
@@ -189,24 +204,25 @@ public class Kanalarz {
                             : value;
                 }
 
-                case SearchResult.FoundShouldRerun foundShouldRerun -> {}
+                case SearchResult.FoundShouldRerun ignored -> {}
 
-                case SearchResult.NotFound notFound
+                case SearchResult.NotFound ignored
                     when context.optionEnabled(Option.NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED) -> {}
 
-                case SearchResult.NotFound notFound -> {
+                case SearchResult.NotFound ignored ->
                     throw new KanalarzException.KanalarzNewStepBeforeReplayEndedException(
                         stepIdentifier + " was called with parameters it hadn't been called with before or " +
                             "it hadn't been called before at all: " + serializedParameters
                     );
-                }
             }
         }
 
+        var contextStack = contextStackOrThrow();
         persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
-            context.getId(),
-            stepId,
-            Optional.ofNullable(parentStepId),
+            contextStack.contextId(),
+            contextStack.parentContextId(),
+            contextStack.stepIdOrThrow(),
+            contextStack.parentStepId(),
             Optional.empty(),
             context.fullMetadata(),
             stepIdentifier,
@@ -263,10 +279,12 @@ public class Kanalarz {
         }
 
         var failed = error != null;
+        var contextStackAfterExecute = contextStackOrThrow();
         persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
-            context.getId(),
-            stepId,
-            Optional.ofNullable(parentStepId),
+            contextStackAfterExecute.contextId(),
+            contextStackAfterExecute.parentContextId(),
+            contextStackAfterExecute.stepIdOrThrow(),
+            contextStackAfterExecute.parentStepId(),
             Optional.empty(),
             Collections.unmodifiableMap(context.fullMetadata()),
             stepIdentifier,
@@ -305,6 +323,7 @@ public class Kanalarz {
         @Nullable UUID resumesContext,
         Function<KanalarzContext, T> body,
         EnumSet<Option> options,
+        @Nullable String identifier,
         boolean resumeReplay
     ) {
         if (resumeReplay && resumesContext == null) {
@@ -318,7 +337,10 @@ public class Kanalarz {
             ? createStepReplayer(resumesContext, options)
             : null;
 
-        try (var autoCloseableContext = new AutoCloseableContext(metadata, resumesContext, options, replayer)) {
+        try (
+            var autoCloseableContext =
+                 new AutoCloseableContext(metadata, resumesContext, options, replayer, identifier)
+        ) {
             try {
                 var result = body.apply(autoCloseableContext.context());
                 if (replayer != null) {
@@ -380,22 +402,26 @@ public class Kanalarz {
         }
     }
 
-    private KanalarzStepReplayer createStepReplayer(UUID resumesContext, EnumSet<Option> options) {
+    private StepReplayer createStepReplayer(UUID resumesContext, EnumSet<Option> options) {
         var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(resumesContext);
 
         if (options.contains(Option.OUT_OF_ORDER_REPLAY)) {
-            return new KanalarzStepReplayer.KanalarzOutOfOrderStepReplayer(serialization, stepsRegistry, executedSteps);
+            return new StepReplayer.OutOfOrderStepReplayer(serialization, stepsRegistry, executedSteps);
         } else {
-            return new KanalarzStepReplayer.KanalarzInOrderStepReplayer(serialization, stepsRegistry, executedSteps);
+            return new StepReplayer.InOrderStepReplayer(serialization, stepsRegistry, executedSteps);
         }
     }
 
     private void rollbackInContext(
         Map<String, String> metadata,
         @Nullable UUID resumesContext,
-        EnumSet<Option> options
+        EnumSet<Option> options,
+        @Nullable String identifier
     ) {
-        try (var autoCloseableContext = new AutoCloseableContext(metadata, resumesContext, options, null)) {
+        try (
+            var autoCloseableContext =
+                new AutoCloseableContext(metadata, resumesContext, options, null, identifier)
+        ) {
             performRollback(autoCloseableContext.context(), null, options, null);
         }
     }
@@ -513,10 +539,12 @@ public class Kanalarz {
                     null
                 );
 
+                var contextStack = contextStackOrThrow();
                 persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
-                    context.getId(),
-                    stepStack.current(),
-                    Optional.empty(),
+                    contextStack.contextId(),
+                    contextStack.parentContextId(),
+                    contextStack.stepIdOrThrow(),
+                    contextStack.parentStepId(),
                     Optional.of(rollforward.stepId()),
                     context.fullMetadata(),
                     rollbackIdentifier,
@@ -553,10 +581,12 @@ public class Kanalarz {
                 );
 
                 boolean failed = error != null;
+                var contextStackAfterExecute = contextStackOrThrow();
                 persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
-                    context.getId(),
-                    stepStack.current(),
-                    Optional.empty(),
+                    contextStackAfterExecute.contextId(),
+                    contextStackAfterExecute.parentContextId(),
+                    contextStackAfterExecute.stepIdOrThrow(),
+                    contextStackAfterExecute.parentStepId(),
                     Optional.of(rollforward.stepId()),
                     context.fullMetadata(),
                     rollbackIdentifier,
@@ -581,6 +611,7 @@ public class Kanalarz {
     public class KanalarzContextBuilder {
 
         @Nullable private UUID resumeContext;
+        @Nullable private String identifier;
         private final Map<String, String> metadata = new HashMap<>();
         private final EnumSet<Option> options = EnumSet.noneOf(Option.class);
 
@@ -592,6 +623,21 @@ public class Kanalarz {
          */
         public KanalarzContextBuilder resumes(@Nullable UUID resumes) {
             this.resumeContext = resumes;
+            return this;
+        }
+
+        /**
+         * Set an optional identifier for the context. This is used in out-of-order resume-replay to determine which
+         * subcontext the library should start replaying. If this is omitted, the library will replay contexts in the
+         * order in which they are being re-executed and in which they were provided from the persistence bean.
+         * If the contexts are being executed in a non-deterministic order, and you launch multiple subcontexts one
+         * after the other, the first context off the queue has a very high chance of not being the right one. In that
+         * case the replay will fail.
+         * @param identifier the identifier of the context
+         * @return this to continue building
+         */
+        public KanalarzContextBuilder identifier(String identifier) {
+            this.identifier = identifier;
             return this;
         }
 
@@ -649,7 +695,7 @@ public class Kanalarz {
          */
         public <T extends @Nullable Object> T start(Function<KanalarzContext, T> block) {
             validateDependantOptions();
-            return inContext(metadata, resumeContext, block, options, false);
+            return inContext(metadata, resumeContext, block, options, identifier, false);
         }
 
         /**
@@ -687,7 +733,7 @@ public class Kanalarz {
          */
         public <T extends @Nullable Object> T startResumeReplay(Function<KanalarzContext, T> block) {
             validateDependantOptions();
-            return inContext(metadata, resumeContext, block, options, true);
+            return inContext(metadata, resumeContext, block, options, identifier, true);
         }
 
         /**
@@ -728,7 +774,7 @@ public class Kanalarz {
                     "Immediate rollback of a context that doesn't resume anything makes no sense!"
                 );
             }
-            rollbackInContext(metadata, resumeContext, options);
+            rollbackInContext(metadata, resumeContext, options, identifier);
         }
 
         private void validateDependantOptions() {
@@ -794,24 +840,19 @@ public class Kanalarz {
     private class AutoCloseableContext implements AutoCloseable {
 
         private final KanalarzContext context;
-        private final @Nullable UUID newContextId;
 
         AutoCloseableContext(
             Map<String, String> metadata,
             @Nullable UUID resumesContext,
             EnumSet<Option> options,
-            @Nullable KanalarzStepReplayer stepReplayer
+            @Nullable StepReplayer stepReplayer,
+            @Nullable String identifier
         ) {
-            context = new KanalarzContext(
-                resumesContext,
-                options,
-                stepReplayer
-            );
-            newContextId = context.getId();
+            context = new KanalarzContext(resumesContext, options, identifier, stepReplayer, forkExecutor);
             context.putAllMetadata(metadata);
-            kanalarzContextThreadLocal.set(new ContextStack(context, kanalarzContextThreadLocal.get()));
+            kanalarzContextThreadLocal.set(new ContextStack(context, contextStackOrNull()));
             activeContexts.incrementAndGet();
-            cancellableContexts.put(newContextId, CancellableContextState.CANCELLABLE);
+            cancellableContexts.put(context.getId(), CancellableContextState.CANCELLABLE);
         }
 
         public KanalarzContext context() {
@@ -820,31 +861,24 @@ public class Kanalarz {
 
         @Override
         public void close() {
-            System.out.println("CLOSING CONTEXT");
-            System.out.println("CLOSED");
-            kanalarzContextThreadLocal.set(
-                Optional.ofNullable(kanalarzContextThreadLocal.get())
-                    .map(ContextStack::parents)
-                    .orElse(null)
-            );
+            context.forkExecutor().join();
+            kanalarzContextThreadLocal.set(contextStackOrThrow().parents());
             activeContexts.decrementAndGet();
-            if (newContextId != null) {
-                cancellableContexts.remove(newContextId);
-            }
+            cancellableContexts.remove(context.getId());
         }
     }
 
     @NullUnmarked
     public static <T> CompletableFuture<T> forkVirtual(Supplier<T> block) {
-        var contextStack = contextStack();
-        return CompletableFuture.supplyAsync(() -> {
+        var contextStack = contextStackOrThrow().copy();
+        return contextStack.context().forkExecutor().supplyAsync(() -> {
             try {
-                kanalarzContextThreadLocal.set(contextStack.orElse(null));
+                kanalarzContextThreadLocal.set(contextStack);
                 return block.get();
             } finally {
                 kanalarzContextThreadLocal.remove();
             }
-        }, noContextExecutor);
+        });
     }
 
     public static CompletableFuture<@Nullable Void> forkRunVirtual(Runnable block) {

@@ -6,47 +6,78 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 @NullMarked
 public class KanalarzContext {
 
     private final UUID id;
     private final EnumSet<Kanalarz.Option> options;
-    private final Map<String, String> metadata = new ConcurrentHashMap<>();
+    private final Map<String, String> metadata;
+    private final ContextForkExecutor contextForkExecutor;
+    @Nullable private StepReplayer stepReplayer;
+    @Nullable private StepStack stepStack = null;
+    @Nullable private final String identifier;
 
-    public record StepStack(UUID current, @Nullable StepStack parents) {
+    public record StepStack(
+        UUID current,
+        @Nullable StepStack parents
+    ) {
 
         @Nullable
         UUID parentStepId() {
             return parents == null ? null : parents.current();
         }
     }
-    private final ThreadLocal<@Nullable StepStack> stepStack = new ThreadLocal<>();
-
-    @Nullable
-    private KanalarzStepReplayer stepReplayer;
 
     KanalarzContext(
         @Nullable UUID resumesId,
         EnumSet<Kanalarz.Option> options,
-        @Nullable KanalarzStepReplayer stepReplayer
+        @Nullable String identifier,
+        @Nullable StepReplayer stepReplayer,
+        ExecutorService executorService
     ) {
         this.id = resumesId != null ? resumesId : UUID.randomUUID();
         this.options = options;
+        this.identifier = identifier;
         this.stepReplayer = stepReplayer;
+        this.metadata = new ConcurrentHashMap<>();
+        this.contextForkExecutor = new ContextForkExecutor(executorService);
+    }
+
+    private KanalarzContext(KanalarzContext other) {
+        this.id = other.id;
+        this.options = other.options;
+        this.stepReplayer = other.stepReplayer;
+        this.stepStack = other.stepStack;
+        this.metadata = other.metadata;
+        this.contextForkExecutor = other.contextForkExecutor;
+        this.identifier = other.identifier;
+    }
+
+    KanalarzContext copy() {
+        return new KanalarzContext(this);
+    }
+
+    @Override
+    protected Object clone() throws CloneNotSupportedException {
+        return super.clone();
     }
 
     public UUID getId() {
         return id;
     }
 
+    @Nullable
+    public String getIdentifier() {
+        return identifier;
+    }
+
     /**
      * @return An *unmodifiable* map with the entire context metadata. For performance reasons, the map is not cloned
      * and can change over time. If that is not desirable, you should clone the map immediately before storing.
      */
-
     public Map<String, String> fullMetadata() {
         return Collections.unmodifiableMap(this.metadata);
     }
@@ -62,8 +93,7 @@ public class KanalarzContext {
 
 
     public Optional<String> getMetadataOpt(String key) {
-        // Intellij static null analysis doesn't handle this... thinks I'm returning Optional<@Nullable String>
-        return (Optional<@NonNull String>) Optional.ofNullable(this.getMetadata(key));
+        return Optional.ofNullable(this.getMetadata(key));
     }
 
     @Nullable
@@ -78,11 +108,11 @@ public class KanalarzContext {
 
     @Nullable
     public StepStack stepStack() {
-        return stepStack.get();
+        return stepStack;
     }
 
     @Nullable
-    KanalarzStepReplayer stepReplayer() {
+    StepReplayer stepReplayer() {
         return stepReplayer;
     }
 
@@ -95,19 +125,15 @@ public class KanalarzContext {
     }
 
     <T extends @Nullable Object> T withNewStep(Function<StepStack, T> block) {
-        stepStack.set(new StepStack(UUID.randomUUID(), stepStack.get()));
+        stepStack = new StepStack(UUID.randomUUID(), stepStack);
         try {
-            return block.apply(Objects.requireNonNull(
-                stepStack.get(),
-                "Logic error! KanalarzContext.withStepId unexpected null!")
-            );
+            return block.apply(stepStack);
         } finally {
-            stepStack.set(
-                Objects.requireNonNull(
-                    stepStack.get(),
-                    "Logic error! KanalarzContext.withStepId finally unexpected null!"
-                ).parents()
-            );
+            stepStack = stepStack.parents();
         }
+    }
+
+    ContextForkExecutor forkExecutor() {
+        return this.contextForkExecutor;
     }
 }

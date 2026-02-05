@@ -98,12 +98,6 @@ public class BasicTests {
     }
 
     @Test
-    void stepOutsideOfContext() {
-        assertThat(testSteps.setName("test")).isEqualTo(Optional.empty());
-        assertThat(testNameService.name()).isEqualTo("test");
-    }
-
-    @Test
     void basicRollforward() {
         assertThat(testNameService.name()).isNull();
         kanalarz.newContext().consume(ctx ->

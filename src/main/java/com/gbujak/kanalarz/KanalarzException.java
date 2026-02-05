@@ -16,7 +16,8 @@ public sealed abstract class KanalarzException extends RuntimeException permits
     KanalarzException.KanalarzSerializationException,
     KanalarzException.KanalarzNewStepBeforeReplayEndedException,
     KanalarzException.KanalarzNotAllStepsReplayedException,
-    KanalarzException.KanalarzStepsWereNotReplayedAndWillPartiallyRollbackException
+    KanalarzException.KanalarzStepsWereNotReplayedAndWillPartiallyRollbackException,
+    KanalarzException.KanalarzNoContextException
 {
 
     private KanalarzException(@Nullable String message, @Nullable Throwable cause) {
@@ -119,6 +120,12 @@ public sealed abstract class KanalarzException extends RuntimeException permits
                 "Some steps were not replayed and they will be rolled back " +
                     "but the entire context will not be rolled back.", null
             );
+        }
+    }
+
+    public final static class KanalarzNoContextException extends KanalarzException {
+        KanalarzNoContextException() {
+            super("Trying to so something that requires a context outside of any active context", null);
         }
     }
 }
