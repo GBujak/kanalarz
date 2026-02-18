@@ -16,15 +16,18 @@ sealed interface StepReplayer {
         private final List<KanalarzPersistence.StepExecutedInfo> stepsToReplay;
         private int currentStep = 0;
         private final ReentrantLock lock = new ReentrantLock();
+        private final UUID rootReplayingContext;
 
         InOrderStepReplayer(
             KanalarzSerialization serialization,
             KanalarzStepsRegistry stepsRegistry,
-            List<KanalarzPersistence.StepExecutedInfo> stepsExecuted
+            List<KanalarzPersistence.StepExecutedInfo> stepsExecuted,
+            UUID rootReplayingContext
         ) {
             this.serialization = serialization;
             this.stepsRegistry = stepsRegistry;
             this.stepsToReplay = buildStepsToReplay(stepsExecuted);
+            this.rootReplayingContext = rootReplayingContext;
         }
 
         @Override
@@ -90,6 +93,11 @@ sealed interface StepReplayer {
                 lock.unlock();
             }
         }
+
+        @Override
+        public UUID rootReplayingContext() {
+            return rootReplayingContext;
+        }
     }
 
     final class OutOfOrderStepReplayer implements StepReplayer {
@@ -98,6 +106,7 @@ sealed interface StepReplayer {
         private final KanalarzStepsRegistry stepsRegistry;
         private final List<KanalarzPersistence.StepExecutedInfo> stepsToReplay;
         private final ReentrantLock lock = new ReentrantLock();
+        private final UUID rootReplayingContext;
 
         private final boolean[] stepsReplayed;
         private int firstUnreplayedIndex = 0;
@@ -105,12 +114,14 @@ sealed interface StepReplayer {
         OutOfOrderStepReplayer(
             KanalarzSerialization serialization,
             KanalarzStepsRegistry stepsRegistry,
-            List<KanalarzPersistence.StepExecutedInfo> stepsExecuted
+            List<KanalarzPersistence.StepExecutedInfo> stepsExecuted,
+            UUID rootReplayingContext
         ) {
             this.serialization = serialization;
             this.stepsRegistry = stepsRegistry;
             this.stepsToReplay = StepReplayer.buildStepsToReplay(stepsExecuted);
             this.stepsReplayed = new boolean[this.stepsToReplay.size()];
+            this.rootReplayingContext = rootReplayingContext;
         }
 
         @Override
@@ -197,6 +208,11 @@ sealed interface StepReplayer {
                 lock.unlock();
             }
         }
+
+        @Override
+        public UUID rootReplayingContext() {
+            return rootReplayingContext;
+        }
     }
 
     SearchResult findNextStep(
@@ -205,6 +221,7 @@ sealed interface StepReplayer {
     );
     boolean isDone();
     List<KanalarzPersistence.StepExecutedInfo> unreplayed();
+    UUID rootReplayingContext();
 
     static private List<KanalarzPersistence.StepExecutedInfo>
     buildStepsToReplay(List<KanalarzPersistence.StepExecutedInfo> stepsExecuted) {

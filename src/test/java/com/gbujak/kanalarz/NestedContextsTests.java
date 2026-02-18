@@ -109,22 +109,73 @@ public class NestedContextsTests {
     }
 
     @Test
-    void test() {
+    void childContextFailingShouldNotFailParentIfCaught() {
+        var exception = new RuntimeException();
         List<UUID> postIdsA = new ArrayList<>();
         List<UUID> postIdsB = new ArrayList<>();
+
         kanalarz.newContext().consume((ignored) -> {
             postIdsA.add(steps.submitPostA("test 1"));
             assertThatThrownBy(() ->
                 kanalarz.newContext().consume((ignored2) -> {
                     postIdsB.add(steps.submitPostB("test 1"));
                     postIdsB.add(steps.submitPostB("test 2"));
-                    throw new RuntimeException();
+                    throw exception;
                 })
-            );
+            ).hasCause(exception);
             postIdsA.add(steps.submitPostA("test 2"));
         });
+
         assertThat(service.getPostA(postIdsA.get(0))).isEqualTo("test 1");
         assertThat(service.getPostA(postIdsA.get(1))).isEqualTo("test 2");
+        assertThat(service.getPostB(postIdsB.get(0))).isNull();
+        assertThat(service.getPostB(postIdsB.get(1))).isNull();
+    }
+
+    @Test
+    void childContextFailingShouldFailParentIfNotCaught() {
+        var exception = new RuntimeException();
+        List<UUID> postIdsA = new ArrayList<>();
+        List<UUID> postIdsB = new ArrayList<>();
+
+        assertThatThrownBy(() ->
+            kanalarz.newContext().consume((ignored) -> {
+                postIdsA.add(steps.submitPostA("test 1"));
+                kanalarz.newContext().consume((ignored2) -> {
+                    postIdsB.add(steps.submitPostB("test 1"));
+                    postIdsB.add(steps.submitPostB("test 2"));
+                    throw exception;
+                });
+                postIdsA.add(steps.submitPostA("test 2"));
+            })
+        ).isExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
+            .hasCauseExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
+            .hasRootCause(exception);
+
+        assertThat(postIdsA).hasSize(1);
+        assertThat(service.getPostA(postIdsA.get(0))).isNull();
+        assertThat(service.getPostB(postIdsB.get(0))).isNull();
+        assertThat(service.getPostB(postIdsB.get(1))).isNull();
+    }
+
+    @Test
+    void parentFailingShouldRollbackTheChildAsWell() {
+        var exception = new RuntimeException();
+        List<UUID> postIdsA = new ArrayList<>();
+        List<UUID> postIdsB = new ArrayList<>();
+
+        assertThatThrownBy(() -> kanalarz.newContext().consume((ignored) -> {
+            postIdsA.add(steps.submitPostA("test 1"));
+            kanalarz.newContext().consume((ignored2) -> {
+                postIdsB.add(steps.submitPostB("test 1"));
+                postIdsB.add(steps.submitPostB("test 2"));
+            });
+            postIdsA.add(steps.submitPostA("test 2"));
+            throw exception;
+        })).hasCause(exception);
+
+        assertThat(service.getPostA(postIdsA.get(0))).isNull();
+        assertThat(service.getPostA(postIdsA.get(1))).isNull();
         assertThat(service.getPostB(postIdsB.get(0))).isNull();
         assertThat(service.getPostB(postIdsB.get(1))).isNull();
     }

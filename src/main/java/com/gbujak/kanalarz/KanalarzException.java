@@ -1,5 +1,6 @@
 package com.gbujak.kanalarz;
 
+import com.gbujak.kanalarz.KanalarzPersistence.StepExecutedInfo;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -12,11 +13,13 @@ public sealed abstract class KanalarzException extends RuntimeException permits
     KanalarzException.KanalarzRollbackStepFailedException,
     KanalarzException.KanalarzInternalError,
     KanalarzException.KanalarzContextCancelledException,
+    KanalarzException.KanalarzContextPoisonedException,
     KanalarzException.KanalarzIllegalUsageException,
     KanalarzException.KanalarzSerializationException,
     KanalarzException.KanalarzNewStepBeforeReplayEndedException,
     KanalarzException.KanalarzNotAllStepsReplayedException,
     KanalarzException.KanalarzStepsWereNotReplayedAndWillPartiallyRollbackException,
+    KanalarzException.KanalarzUnsafeAmbiguousOutOfOrderReplay,
     KanalarzException.KanalarzNoContextException
 {
 
@@ -90,6 +93,12 @@ public sealed abstract class KanalarzException extends RuntimeException permits
         }
     }
 
+    public final static class KanalarzContextPoisonedException extends KanalarzException {
+        KanalarzContextPoisonedException() {
+            super("Context was poisoned! Some thread failed it's resume-replay. Will unwind.", null);
+        }
+    }
+
     public final static class KanalarzIllegalUsageException extends KanalarzException {
         KanalarzIllegalUsageException(String message) {
             super("Illegal usage of kanalarz library: " + message, null);
@@ -119,6 +128,17 @@ public sealed abstract class KanalarzException extends RuntimeException permits
             super(
                 "Some steps were not replayed and they will be rolled back " +
                     "but the entire context will not be rolled back.", null
+            );
+        }
+    }
+
+    public final static class KanalarzUnsafeAmbiguousOutOfOrderReplay extends KanalarzException {
+        KanalarzUnsafeAmbiguousOutOfOrderReplay(StepExecutedInfo left, StepExecutedInfo right) {
+            super(
+                "Abandoning out of order replay because some steps were called with the same parameters " +
+                    "but returned a different result and replaying them in the wrong order could be unsafe: " +
+                    "[%s] steps with IDs [%s] and [%s]"
+                        .formatted(left.stepIdentifier(), left.stepId(), right.stepId()), null
             );
         }
     }

@@ -9,12 +9,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 
 @NullMarked
-public class ContextForkExecutor {
+class ForkExecutor {
 
     private final ExecutorService executor;
     private final Set<CompletableFuture<?>> inFlight = ConcurrentHashMap.newKeySet();
 
-    public ContextForkExecutor(ExecutorService executor) {
+    public ForkExecutor(ExecutorService executor) {
         this.executor = executor;
     }
 

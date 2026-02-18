@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -134,7 +135,6 @@ public class ConcurrentTests {
             }
         });
 
-
         assertThat(service.value).isEqualTo(sum.get());
         assertThat(service.valueHistory.getLast()).isEqualTo(sum.get());
 
@@ -145,8 +145,8 @@ public class ConcurrentTests {
             .hasSize(stepsRan.get() * 2 + nestedStepsRan.get());
     }
 
-    // has to be outside of the test method because of a java compiler bug
-    // https://bugs.openjdk.org/browse/JDK-8349480?page=com.atlassian.jira.plugin.system.issuetabpanels%3Achangehistory-tabpanel
+    // has to be outside the test method because of a java compiler bug
+    // https://bugs.openjdk.org/browse/JDK-8349480
     sealed interface Executed {
         record AddedOne(int value) implements Executed {}
         record AddedMany(List<Integer> value) implements Executed {}
@@ -172,9 +172,9 @@ public class ConcurrentTests {
                         stepsRan.addAndGet(1);
                     } else {
                         var values = IntStream.range(0, 50)
-                            .boxed()
                             .map(it -> (int) Math.floor(Math.random() * 10))
                             .peek(sum::addAndGet)
+                            .boxed()
                             .toList();
                         executed.add(new Executed.AddedMany(values.stream().toList()));
                         steps.addAllConcurrently(values);

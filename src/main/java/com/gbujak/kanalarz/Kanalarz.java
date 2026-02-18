@@ -35,20 +35,21 @@ public class Kanalarz {
         CANCELLABLE,
         CANCELLED,
         CANCELLED_FORCE_DEFER_ROLLBACK,
+        POISONED,
     }
 
     private final KanalarzStepsRegistry stepsRegistry;
     private final KanalarzSerialization serialization;
-    private final KanalarzPersistence persistance;
+    private final KanalarzPersistence persistence;
 
     Kanalarz(
         KanalarzStepsRegistry stepsRegistry,
         KanalarzSerialization serialization,
-        KanalarzPersistence persistance
+        KanalarzPersistence persistence
     ) {
         this.stepsRegistry = stepsRegistry;
         this.serialization = serialization;
-        this.persistance = persistance;
+        this.persistence = persistence;
     }
 
     public record ContextStack(
@@ -60,19 +61,25 @@ public class Kanalarz {
             return new ContextStack(context.copy(), parents != null ? parents.copy() : null);
         }
 
+        private ContextStack copyWithNewThreadId() {
+            return new ContextStack(context.copyWithNewThreadId(), parents != null ? parents.copy() : null);
+        }
+
         private UUID contextId() {
             return context.getId();
         }
 
-        private Optional<UUID> parentContextId() {
-            return Optional.ofNullable(parents()).map(ContextStack::contextId);
+        private List<UUID> contextIds() {
+            return Stream.iterate(this, Objects::nonNull, ContextStack::parents)
+                .filter(Objects::nonNull)
+                .map(ContextStack::contextId)
+                .toList();
         }
 
         private UUID stepIdOrThrow() {
-            return
-                Optional.ofNullable(context.stepStack())
-                    .orElseThrow(() -> new KanalarzException.KanalarzInternalError("No steps active!", null))
-                    .current();
+            return Optional.ofNullable(context.stepStack())
+                .orElseThrow(() -> new KanalarzException.KanalarzInternalError("No steps active!", null))
+                .current();
         }
 
         private Optional<UUID> parentStepId() {
@@ -218,9 +225,8 @@ public class Kanalarz {
         }
 
         var contextStack = contextStackOrThrow();
-        persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
-            contextStack.contextId(),
-            contextStack.parentContextId(),
+        persistence.stepStarted(new KanalarzPersistence.StepStartedEvent(
+            contextStack.contextIds(),
             contextStack.stepIdOrThrow(),
             contextStack.parentStepId(),
             Optional.empty(),
@@ -229,7 +235,8 @@ public class Kanalarz {
             stepInfo.description,
             serializedParameters,
             step != null && step.fallible(),
-            stepInfo.rollbackMarker
+            stepInfo.rollbackMarker,
+            contextStack.context().threadId()
         ));
 
         Object result = null;
@@ -280,9 +287,8 @@ public class Kanalarz {
 
         var failed = error != null;
         var contextStackAfterExecute = contextStackOrThrow();
-        persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
-            contextStackAfterExecute.contextId(),
-            contextStackAfterExecute.parentContextId(),
+        persistence.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
+            contextStack.contextIds(),
             contextStackAfterExecute.stepIdOrThrow(),
             contextStackAfterExecute.parentStepId(),
             Optional.empty(),
@@ -291,7 +297,8 @@ public class Kanalarz {
             stepInfo.description,
             resultSerialized,
             failed,
-            stepInfo.rollbackMarker
+            stepInfo.rollbackMarker,
+            contextStack.context().threadId()
         ));
 
         if (failed) {
@@ -370,32 +377,17 @@ public class Kanalarz {
                 throw e;
             } catch (KanalarzException.KanalarzStepFailedException e) {
                 if (!options.contains(Option.DEFER_ROLLBACK)) {
-                    performRollback(
-                        autoCloseableContext.context(),
-                        e.getInitialStepFailedException(),
-                        options,
-                        null
-                    );
+                    performRollback(autoCloseableContext.context(), e.getInitialStepFailedException(), options, null);
                 }
                 throw e;
             } catch (KanalarzException.KanalarzContextCancelledException e) {
                 if (!options.contains(Option.DEFER_ROLLBACK) && !e.forceDeferRollback()) {
-                    performRollback(
-                        autoCloseableContext.context(),
-                        e,
-                        options,
-                        null
-                    );
+                    performRollback(autoCloseableContext.context(), e, options, null);
                 }
                 throw e;
             } catch (Throwable e) {
                 if (!options.contains(Option.DEFER_ROLLBACK)) {
-                    performRollback(
-                        autoCloseableContext.context(),
-                        e,
-                        options,
-                        null
-                    );
+                    performRollback(autoCloseableContext.context(), e, options, null);
                 }
                 throw new KanalarzException.KanalarzThrownOutsideOfStepException(e);
             }
@@ -403,12 +395,15 @@ public class Kanalarz {
     }
 
     private StepReplayer createStepReplayer(UUID resumesContext, EnumSet<Option> options) {
-        var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(resumesContext);
+        var executedSteps = persistence.getExecutedStepsInContextInOrderOfExecution(resumesContext);
 
         if (options.contains(Option.OUT_OF_ORDER_REPLAY)) {
-            return new StepReplayer.OutOfOrderStepReplayer(serialization, stepsRegistry, executedSteps);
+            if (!options.contains(Option.ALLOW_UNSAFE_REPLAY_OF_AMBIGUOUS_OUT_OF_ORDER_CALLS)) {
+                Utils.throwOnAmbiguousOutOfOrderStepReplay(executedSteps, serialization);
+            }
+            return new StepReplayer.OutOfOrderStepReplayer(serialization, stepsRegistry, executedSteps, resumesContext);
         } else {
-            return new StepReplayer.InOrderStepReplayer(serialization, stepsRegistry, executedSteps);
+            return new StepReplayer.InOrderStepReplayer(serialization, stepsRegistry, executedSteps, resumesContext);
         }
     }
 
@@ -432,7 +427,7 @@ public class Kanalarz {
         EnumSet<Option> options,
         @Nullable Set<UUID> specificStepsToRollbackOnly
     ) {
-        var executedSteps = persistance.getExecutedStepsInContextInOrderOfExecution(context.getId());
+        var executedSteps = persistence.getExecutedStepsInContextInOrderOfExecution(context.getId());
         var executedRollbacks =
             executedSteps.stream()
                 .filter(it -> it.wasRollbackFor().isPresent())
@@ -540,9 +535,8 @@ public class Kanalarz {
                 );
 
                 var contextStack = contextStackOrThrow();
-                persistance.stepStarted(new KanalarzPersistence.StepStartedEvent(
-                    contextStack.contextId(),
-                    contextStack.parentContextId(),
+                persistence.stepStarted(new KanalarzPersistence.StepStartedEvent(
+                    contextStack.contextIds(),
                     contextStack.stepIdOrThrow(),
                     contextStack.parentStepId(),
                     Optional.of(rollforward.stepId()),
@@ -551,7 +545,8 @@ public class Kanalarz {
                     rollback.description,
                     serializedParameters,
                     fallible,
-                    stepInfo.rollbackMarker
+                    stepInfo.rollbackMarker,
+                    contextStack.context().threadId()
                 ));
 
                 Object result = null;
@@ -582,9 +577,8 @@ public class Kanalarz {
 
                 boolean failed = error != null;
                 var contextStackAfterExecute = contextStackOrThrow();
-                persistance.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
-                    contextStackAfterExecute.contextId(),
-                    contextStackAfterExecute.parentContextId(),
+                persistence.stepCompleted(new KanalarzPersistence.StepCompletedEvent(
+                    contextStack.contextIds(),
                     contextStackAfterExecute.stepIdOrThrow(),
                     contextStackAfterExecute.parentStepId(),
                     Optional.of(rollforward.stepId()),
@@ -593,7 +587,8 @@ public class Kanalarz {
                     rollback.description,
                     serializedResult,
                     failed,
-                    stepInfo.rollbackMarker
+                    stepInfo.rollbackMarker,
+                    contextStack.context().threadId()
                 ));
 
                 if (failed && !fallible && !options.contains(Option.ALL_ROLLBACK_STEPS_FALLIBLE)) {
@@ -828,10 +823,13 @@ public class Kanalarz {
         cancellableContexts.compute(contextId, (id, state) ->
             switch (state) {
                 case CANCELLABLE -> newState;
-                case null -> throw new IllegalStateException(
-                    "Context [%s] is not currently running.".formatted(id));
-                default -> throw new IllegalStateException(
-                    "Context [%s] has already been cancelled.".formatted(id));
+                case POISONED ->
+                    throw new IllegalStateException("Context [%s] has been poisoned.".formatted(id));
+                case null ->
+                    throw new IllegalStateException("Context [%s] is not currently running.".formatted(id));
+                case CANCELLED,
+                     CANCELLED_FORCE_DEFER_ROLLBACK ->
+                    throw new IllegalStateException("Context [%s] has already been cancelled.".formatted(id));
             }
         );
     }
@@ -861,7 +859,7 @@ public class Kanalarz {
 
         @Override
         public void close() {
-            context.forkExecutor().join();
+            context.contextForkExecutor().join();
             kanalarzContextThreadLocal.set(contextStackOrThrow().parents());
             activeContexts.decrementAndGet();
             cancellableContexts.remove(context.getId());
@@ -870,7 +868,7 @@ public class Kanalarz {
 
     @NullUnmarked
     public static <T> CompletableFuture<T> forkVirtual(Supplier<T> block) {
-        var contextStack = contextStackOrThrow().copy();
+        var contextStack = contextStackOrThrow().copyWithNewThreadId();
         return contextStack.context().forkExecutor().supplyAsync(() -> {
             try {
                 kanalarzContextThreadLocal.set(contextStack);
@@ -956,6 +954,15 @@ public class Kanalarz {
          * in a different way that doesn't require this option to be enabled.</b>
          */
         NEW_STEPS_CAN_EXECUTE_BEFORE_ALL_REPLAYED(OUT_OF_ORDER_REPLAY),
+
+        /**
+         * If the same step has been called twice with the same parameters but returned a different result each time,
+         * and the pipeline is replaying out of order, it's impossible to tell which value to return first. By default,
+         * the pipeline discovers when this occurs and fails the replay immediately before replaying any steps.
+         * If this option is enabled, that situation is ignored. Make sure you accept the potential danger if you
+         * enable this option.
+         */
+        ALLOW_UNSAFE_REPLAY_OF_AMBIGUOUS_OUT_OF_ORDER_CALLS,
 
         /**
          * Will not fail the whole pipeline nor trigger a rollback if some steps were not replayed. The non-replayed

@@ -12,8 +12,7 @@ import java.util.UUID;
 public interface KanalarzPersistence {
 
     record StepStartedEvent(
-        UUID contextId,
-        Optional<UUID> parentContextId,
+        List<UUID> contexts,
         UUID stepId,
         Optional<UUID> parentStepId,
         Optional<UUID> stepIsRollbackFor,
@@ -22,13 +21,13 @@ public interface KanalarzPersistence {
         @Nullable ParameterizedStepDescription description,
         String serializedParameters,
         boolean isFallible,
-        boolean isRollbackMarker
+        boolean isRollbackMarker,
+        int threadId
     ) {}
     void stepStarted(StepStartedEvent stepStartedEvent);
 
     record StepCompletedEvent(
-        UUID contextId,
-        Optional<UUID> parentContextId,
+        List<UUID> contexts,
         UUID stepId,
         Optional<UUID> parentStepId,
         Optional<UUID> stepIsRollbackFor,
@@ -37,19 +36,20 @@ public interface KanalarzPersistence {
         @Nullable ParameterizedStepDescription description,
         String serializedExecutionResult,
         boolean failed,
-        boolean isRollbackMarker
+        boolean isRollbackMarker,
+        int threadId
     ) {}
     void stepCompleted(StepCompletedEvent stepCompletedEvent);
 
     record StepExecutedInfo(
-        UUID contextId,
+        List<UUID> contexts,
         UUID stepId,
         String stepIdentifier,
         String serializedExecutionResult,
-        Optional<UUID> parentContextId,
         Optional<UUID> parentStepId,
         Optional<UUID> wasRollbackFor,
-        boolean failed
+        boolean failed,
+        int threadId
     ) {}
 
     /**

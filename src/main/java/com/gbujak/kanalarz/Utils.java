@@ -1,5 +1,6 @@
 package com.gbujak.kanalarz;
 
+import com.gbujak.kanalarz.KanalarzPersistence.StepExecutedInfo;
 import kotlin.Metadata;
 import kotlin.jvm.internal.Reflection;
 import kotlin.reflect.KClass;
@@ -14,8 +15,10 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @NullMarked
 class Utils {
@@ -235,6 +238,37 @@ class Utils {
             }
         } else {
             throw new IllegalArgumentException("Type is not void, Void, or kotlin.Unit! " + type.getTypeName());
+        }
+    }
+
+    static void throwOnAmbiguousOutOfOrderStepReplay(
+        List<StepExecutedInfo> steps,
+        KanalarzSerialization serialization
+    ) {
+        Map<String, List<StepExecutedInfo>> groups = new HashMap<>();
+        for (var step : steps) {
+            groups.computeIfAbsent(step.stepIdentifier(), ignored -> new ArrayList<>()).add(step);
+        }
+
+        for (List<StepExecutedInfo> group : groups.values()) {
+            if (group.size() < 2) continue;
+
+            for (int i = 0; i < group.size(); i++) {
+                var left = group.get(i);
+                var leftResult = left.serializedExecutionResult();
+
+                for (int j = i + 1; j < group.size(); j++) {
+                    var right = group.get(j);
+                    var rightResult = right.serializedExecutionResult();
+
+                    if (
+                        serialization.parametersAreEqualIgnoringReturn(leftResult, rightResult)
+                            && !serialization.returnValuesAreEqual(leftResult, rightResult)
+                    ) {
+                        throw new KanalarzException.KanalarzUnsafeAmbiguousOutOfOrderReplay(left, right);
+                    }
+                }
+            }
         }
     }
 }

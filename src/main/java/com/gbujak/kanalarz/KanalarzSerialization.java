@@ -43,4 +43,6 @@ public interface KanalarzSerialization {
     );
 
     boolean parametersAreEqualIgnoringReturn(String left,  String right);
+
+    boolean returnValuesAreEqual(String left, String right);
 }
