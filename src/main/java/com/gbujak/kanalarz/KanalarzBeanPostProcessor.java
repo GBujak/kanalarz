@@ -10,6 +10,7 @@ import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.BeanPostProcessor;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.ReflectionUtils;
 
@@ -76,10 +77,11 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
         proxyFactory.setTargetClass(targetClass);
         proxyFactory.setInterfaces(targetClass.getInterfaces());
         proxyFactory.setTarget(target);
+        proxyFactory.setProxyTargetClass(true);
         proxyFactory.addAdvice((MethodInterceptor) invocation -> {
             var method = invocation.getMethod();
-            Step step = method.getAnnotation(Step.class);
-            RollbackOnly rollbackOnly = method.getAnnotation(RollbackOnly.class);
+            Step step = AnnotatedElementUtils.getMergedAnnotation(method, Step.class);
+            RollbackOnly rollbackOnly = AnnotatedElementUtils.getMergedAnnotation(method, RollbackOnly.class);
             if (step == null && rollbackOnly == null) {
                 return method.invoke(target, invocation.getArguments());
             } else {
