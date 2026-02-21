@@ -11,6 +11,13 @@ import java.util.UUID;
 @NullMarked
 public interface KanalarzPersistence {
 
+    /**
+     * @param contexts The context stack in which this step was executed.
+     *                 Start of the list is the top-level context, end is the bottom
+     * @param forkJoinIdx Index into the list passed into a forkJoin call if this step is being executed in a forkJoin,
+     *                    else <code>-1</code>. This allows the forkJoins to be replayed in order. Can be used to
+     *                    visualize parallel execution to the users.
+     */
     record StepStartedEvent(
         List<UUID> contexts,
         UUID stepId,
@@ -22,10 +29,17 @@ public interface KanalarzPersistence {
         String serializedParameters,
         boolean isFallible,
         boolean isRollbackMarker,
-        int threadId
+        int forkJoinIdx
     ) {}
     void stepStarted(StepStartedEvent stepStartedEvent);
 
+    /**
+     * @param contexts The context stack in which this step was executed.
+     *                 Start of the list is the top-level context, end is the bottom
+     * @param forkJoinIdx Index into the list passed into a forkJoin call if this step is being executed in a forkJoin,
+     *                    else <code>-1</code>. This allows the forkJoins to be replayed in order. Can be used to
+     *                    visualize parallel execution to the users.
+     */
     record StepCompletedEvent(
         List<UUID> contexts,
         UUID stepId,
@@ -37,10 +51,17 @@ public interface KanalarzPersistence {
         String serializedExecutionResult,
         boolean failed,
         boolean isRollbackMarker,
-        int threadId
+        int forkJoinIdx
     ) {}
     void stepCompleted(StepCompletedEvent stepCompletedEvent);
 
+    /**
+     * @param contexts The context stack in which this step was executed.
+     *                 Start of the list is the top-level context, end is the bottom
+     * @param forkJoinIdx Index into the list passed into a forkJoin call if this step is being executed in a forkJoin,
+     *                    else <code>-1</code>. This allows the forkJoins to be replayed in order. Can be used to
+     *                    visualize parallel execution to the users.
+     */
     record StepExecutedInfo(
         List<UUID> contexts,
         UUID stepId,
@@ -49,11 +70,11 @@ public interface KanalarzPersistence {
         Optional<UUID> parentStepId,
         Optional<UUID> wasRollbackFor,
         boolean failed,
-        int threadId
+        int forkJoinIdx
     ) {}
 
     /**
-     * Get a list of executed steps in the context with the given id, or within any nested contexts indide of that one.
+     * Get a list of executed steps in the context with the given id, or within any nested contexts inside of that one.
      * Sorted by the time the execution was completed, ascendingly.
      */
     List<StepExecutedInfo> getExecutedStepsInContextInOrderOfExecution(UUID contextId);

@@ -13,7 +13,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -26,17 +25,9 @@ import java.util.stream.Stream;
 @NullMarked
 public class Kanalarz {
 
-    private static final AtomicInteger activeContexts = new AtomicInteger();
     private static final ThreadLocal<@Nullable ContextStack> kanalarzContextThreadLocal = new ThreadLocal<>();
     private static final ExecutorService forkExecutor = Executors.newVirtualThreadPerTaskExecutor();
-
-    private final ConcurrentHashMap<UUID, CancellableContextState> cancellableContexts = new ConcurrentHashMap<>();
-    enum CancellableContextState {
-        CANCELLABLE,
-        CANCELLED,
-        CANCELLED_FORCE_DEFER_ROLLBACK,
-        POISONED,
-    }
+    private static final ConcurrentHashMap<UUID, KanalarzContext> contexts = new ConcurrentHashMap<>();
 
     private final KanalarzStepsRegistry stepsRegistry;
     private final KanalarzSerialization serialization;
@@ -66,14 +57,15 @@ public class Kanalarz {
         }
 
         private UUID contextId() {
-            return context.getId();
+            return context.id();
         }
 
         private List<UUID> contextIds() {
             return Stream.iterate(this, Objects::nonNull, ContextStack::parents)
                 .filter(Objects::nonNull)
                 .map(ContextStack::contextId)
-                .toList();
+                .toList()
+                .reversed();
         }
 
         private UUID stepIdOrThrow() {
@@ -136,7 +128,7 @@ public class Kanalarz {
         }
 
         var contextStack = contextStackOrThrow();
-        var stepIdentifier = step != null ? step.value() : rollbackOnly.value();
+        contextStack.context().yield();
 
         return contextStack.context().withNewStep(
             stepStack -> handleInContextMethodExecution(
@@ -146,8 +138,6 @@ public class Kanalarz {
                 stepsHolder,
                 step,
                 rollbackOnly,
-                stepStack.current(),
-                stepStack.parentStepId(),
                 contextStack.context()
             )
         );
@@ -161,17 +151,8 @@ public class Kanalarz {
         StepsHolder stepsHolder,
         @Nullable Step step,
         @Nullable RollbackOnly rollbackOnly,
-        UUID stepId,
-        @Nullable UUID parentStepId,
         KanalarzContext context
     ) {
-        switch (cancellableContexts.get(context.getId())) {
-            case CANCELLED ->
-                throw new KanalarzException.KanalarzContextCancelledException(false);
-            case CANCELLED_FORCE_DEFER_ROLLBACK ->
-                throw new KanalarzException.KanalarzContextCancelledException(true);
-            default -> {}
-        }
 
         StepInfoClasses.StepInfo stepInfo;
         String stepIdentifier;
@@ -346,7 +327,7 @@ public class Kanalarz {
 
         try (
             var autoCloseableContext =
-                 new AutoCloseableContext(metadata, resumesContext, options, replayer, identifier)
+                new AutoCloseableContext(metadata, resumesContext, options, replayer, identifier)
         ) {
             try {
                 var result = body.apply(autoCloseableContext.context());
@@ -427,7 +408,7 @@ public class Kanalarz {
         EnumSet<Option> options,
         @Nullable Set<UUID> specificStepsToRollbackOnly
     ) {
-        var executedSteps = persistence.getExecutedStepsInContextInOrderOfExecution(context.getId());
+        var executedSteps = persistence.getExecutedStepsInContextInOrderOfExecution(context.id());
         var executedRollbacks =
             executedSteps.stream()
                 .filter(it -> it.wasRollbackFor().isPresent())
@@ -786,10 +767,10 @@ public class Kanalarz {
 
     /**
      * Get running contexts globally.
-     * @return unmodifiable set of running contexts
+     * @return unmodifiable map of running contexts
      */
-    public Set<UUID> runningContexts() {
-        return Collections.unmodifiableSet(cancellableContexts.keySet());
+    public Map<UUID, KanalarzContext> runningContexts() {
+        return Collections.unmodifiableMap(contexts);
     }
 
     /**
@@ -799,9 +780,9 @@ public class Kanalarz {
      * @param contextId context id to cancel
      * @throws IllegalStateException if the context has already been cancelled or is not running
      */
-    public void cancelContext(UUID contextId) {
+    public static void cancelContext(UUID contextId) {
         Objects.requireNonNull(contextId);
-        cancelContext(contextId, CancellableContextState.CANCELLED);
+        cancelContext(contextId, KanalarzContext.State.CANCELLED);
     }
 
     /**
@@ -811,31 +792,34 @@ public class Kanalarz {
      * @param contextId context id to cancel
      * @throws IllegalStateException if the context has already been cancelled or is not running
      */
-    public void cancelContextForceDeferRollback(UUID contextId) {
+    public static void cancelContextForceDeferRollback(UUID contextId) {
         Objects.requireNonNull(contextId);
-        cancelContext(contextId, CancellableContextState.CANCELLED_FORCE_DEFER_ROLLBACK);
+        cancelContext(contextId, KanalarzContext.State.CANCELLED_FORCE_DEFER_ROLLBACK);
     }
 
-    private void cancelContext(UUID contextId, CancellableContextState newState) {
-        if (newState == CancellableContextState.CANCELLABLE) {
-            throw new IllegalArgumentException("Can't uncancel a context");
+    private static void cancelContext(UUID contextId, KanalarzContext.State newState) {
+        if (newState == KanalarzContext.State.RUNNING) {
+            throw new KanalarzException.KanalarzInternalError("Can't restore a context state back to running!", null);
         }
-        cancellableContexts.compute(contextId, (id, state) ->
-            switch (state) {
-                case CANCELLABLE -> newState;
-                case POISONED ->
-                    throw new IllegalStateException("Context [%s] has been poisoned.".formatted(id));
-                case null ->
-                    throw new IllegalStateException("Context [%s] is not currently running.".formatted(id));
-                case CANCELLED,
-                     CANCELLED_FORCE_DEFER_ROLLBACK ->
-                    throw new IllegalStateException("Context [%s] has already been cancelled.".formatted(id));
-            }
-        );
+
+        var context = contexts.get(contextId);
+        if (context == null) {
+            throw new IllegalStateException("Context [%s] is not running".formatted(contextId));
+        }
+
+        switch (context.state()) {
+            case null -> {}
+            case RUNNING -> context.moveState(newState);
+            case POISONED ->
+                throw new IllegalStateException("Context [%s] has been poisoned.".formatted(contextId));
+            case CANCELLED,
+                 CANCELLED_FORCE_DEFER_ROLLBACK ->
+                throw new IllegalStateException("Context [%s] has already been cancelled.".formatted(contextId));
+        }
     }
 
     @NullMarked
-    private class AutoCloseableContext implements AutoCloseable {
+    private static class AutoCloseableContext implements AutoCloseable {
 
         private final KanalarzContext context;
 
@@ -849,8 +833,7 @@ public class Kanalarz {
             context = new KanalarzContext(resumesContext, options, identifier, stepReplayer, forkExecutor);
             context.putAllMetadata(metadata);
             kanalarzContextThreadLocal.set(new ContextStack(context, contextStackOrNull()));
-            activeContexts.incrementAndGet();
-            cancellableContexts.put(context.getId(), CancellableContextState.CANCELLABLE);
+            contexts.put(context.id(), context);
         }
 
         public KanalarzContext context() {
@@ -861,8 +844,7 @@ public class Kanalarz {
         public void close() {
             context.contextForkExecutor().join();
             kanalarzContextThreadLocal.set(contextStackOrThrow().parents());
-            activeContexts.decrementAndGet();
-            cancellableContexts.remove(context.getId());
+            contexts.remove(context.id());
         }
     }
 

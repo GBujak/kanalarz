@@ -16,9 +16,6 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.*;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @NullMarked
 class Utils {
@@ -265,7 +262,7 @@ class Utils {
                         serialization.parametersAreEqualIgnoringReturn(leftResult, rightResult)
                             && !serialization.returnValuesAreEqual(leftResult, rightResult)
                     ) {
-                        throw new KanalarzException.KanalarzUnsafeAmbiguousOutOfOrderReplay(left, right);
+                        throw new KanalarzException.KanalarzUnsafeAmbiguousOutOfOrderReplayException(left, right);
                     }
                 }
             }

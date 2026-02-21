@@ -16,23 +16,12 @@ public class KanalarzContext {
     private final Map<String, String> metadata;
     private final ExecutorService executorService;
     private final ForkExecutor contextForkExecutor;
-    @Nullable private StepReplayer stepReplayer;
-    @Nullable private StepStack stepStack = null;
     @Nullable private final String identifier;
     private final AtomicInteger threadIdGenerator;
     private final int threadId;
-
-    public record StepStack(
-        UUID current,
-        @Nullable StepStack parents,
-        ForkExecutor forkExecutor
-    ) {
-
-        @Nullable
-        UUID parentStepId() {
-            return parents == null ? null : parents.current();
-        }
-    }
+    @Nullable private StepReplayer stepReplayer;
+    @Nullable private StepStack stepStack = null;
+    private State state = State.RUNNING;
 
     KanalarzContext(
         @Nullable UUID resumesId,
@@ -78,7 +67,15 @@ public class KanalarzContext {
         return super.clone();
     }
 
-    public UUID getId() {
+    public State state() {
+        return state;
+    }
+
+    void moveState(State newState) {
+        state = newState;
+    }
+
+    public UUID id() {
         return id;
     }
 
@@ -108,8 +105,7 @@ public class KanalarzContext {
         return this.metadata.get(key);
     }
 
-
-    public Optional<String> getMetadataOpt(String key) {
+    public Optional<String> metadataOpt(String key) {
         return Optional.ofNullable(this.getMetadata(key));
     }
 
@@ -159,5 +155,37 @@ public class KanalarzContext {
         return Optional.ofNullable(this.stepStack)
             .map(StepStack::forkExecutor)
             .orElse(this.contextForkExecutor);
+    }
+
+    public void yield() {
+        switch (this.state) {
+            case null -> { }
+            case RUNNING -> { }
+            case CANCELLED ->
+                throw new KanalarzException.KanalarzContextCancelledException(false);
+            case CANCELLED_FORCE_DEFER_ROLLBACK ->
+                throw new KanalarzException.KanalarzContextCancelledException(true);
+            case POISONED ->
+                throw new KanalarzException.KanalarzContextPoisonedException();
+        }
+    }
+
+    public enum State {
+        RUNNING,
+        CANCELLED,
+        CANCELLED_FORCE_DEFER_ROLLBACK,
+        POISONED,
+    }
+
+    public record StepStack(
+        UUID current,
+        @Nullable StepStack parents,
+        ForkExecutor forkExecutor
+    ) {
+
+        @Nullable
+        UUID parentStepId() {
+            return parents == null ? null : parents.current();
+        }
     }
 }

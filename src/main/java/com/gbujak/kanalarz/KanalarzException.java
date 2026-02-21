@@ -19,7 +19,7 @@ public sealed abstract class KanalarzException extends RuntimeException permits
     KanalarzException.KanalarzNewStepBeforeReplayEndedException,
     KanalarzException.KanalarzNotAllStepsReplayedException,
     KanalarzException.KanalarzStepsWereNotReplayedAndWillPartiallyRollbackException,
-    KanalarzException.KanalarzUnsafeAmbiguousOutOfOrderReplay,
+    KanalarzException.KanalarzUnsafeAmbiguousOutOfOrderReplayException,
     KanalarzException.KanalarzNoContextException
 {
 
@@ -132,8 +132,8 @@ public sealed abstract class KanalarzException extends RuntimeException permits
         }
     }
 
-    public final static class KanalarzUnsafeAmbiguousOutOfOrderReplay extends KanalarzException {
-        KanalarzUnsafeAmbiguousOutOfOrderReplay(StepExecutedInfo left, StepExecutedInfo right) {
+    public final static class KanalarzUnsafeAmbiguousOutOfOrderReplayException extends KanalarzException {
+        KanalarzUnsafeAmbiguousOutOfOrderReplayException(StepExecutedInfo left, StepExecutedInfo right) {
             super(
                 "Abandoning out of order replay because some steps were called with the same parameters " +
                     "but returned a different result and replaying them in the wrong order could be unsafe: " +

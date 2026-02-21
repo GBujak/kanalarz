@@ -44,7 +44,7 @@ public class TestPersistence implements KanalarzPersistence {
                 it.parentStepId(),
                 it.stepIsRollbackFor(),
                 it.failed(),
-                it.threadId()
+                it.forkJoinIdx()
             ))
             .toList();
     }
