@@ -16,6 +16,7 @@ build/
 bin/
 !**/src/main/**/bin/
 !**/src/test/**/bin/
+.gradle-local
 
 ### IntelliJ IDEA ###
 .idea

@@ -4,6 +4,7 @@ import com.gbujak.kanalarz.annotations.Rollback;
 import com.gbujak.kanalarz.annotations.RollbackOnly;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
+import com.gbujak.kanalarz.testimplementations.TestPersistence;
 import kotlin.Unit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -121,5 +122,94 @@ public class RollbackOnlyTests {
 
         assertThat(service.names()).isEmpty();
         assertThat(service.failureLogs()).isEqualTo(List.of("Failed to save names " + names));
+
+        var persistence = (TestPersistence) kanalarzPersistence;
+
+        var rollbackStartedInContext = persistence.stepStartedEvents.stream()
+            .filter(it -> it.contexts().contains(contextId))
+            .filter(it -> it.stepIsRollbackFor().isPresent())
+            .toList();
+        var rollbackCompletedInContext = persistence.stepCompletedEvents.stream()
+            .filter(it -> it.contexts().contains(contextId))
+            .filter(it -> it.stepIsRollbackFor().isPresent())
+            .toList();
+
+        assertThat(rollbackStartedInContext)
+            .extracting(KanalarzPersistence.StepStartedEvent::stepIdentifier)
+            .contains("rollback-only-steps:log-failed-names-add:rollback");
+        assertThat(rollbackStartedInContext)
+            .extracting(KanalarzPersistence.StepStartedEvent::isRollbackMarker)
+            .containsOnly(false);
+
+        assertThat(rollbackCompletedInContext)
+            .extracting(KanalarzPersistence.StepCompletedEvent::stepIdentifier)
+            .contains("rollback-only-steps:log-failed-names-add:rollback");
+        assertThat(rollbackCompletedInContext)
+            .extracting(KanalarzPersistence.StepCompletedEvent::isRollbackMarker)
+            .containsOnly(false);
+    }
+
+    @Test
+    void persistsRollbackMarkerFlagsForRollbackExecutions() {
+        var contextId = UUID.randomUUID();
+        var names = List.of("name-1");
+        var exception = new RuntimeException("test");
+
+        assertThatThrownBy(() ->
+            kanalarz.newContext().resumes(contextId).consume((ctx) -> {
+                steps.logFailedNamesAdd(names);
+                steps.saveName(names.get(0));
+                throw exception;
+            })
+        )
+            .isExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
+            .hasCause(exception);
+
+        var persistence = (TestPersistence) kanalarzPersistence;
+
+        var rollbackStartedInContext = persistence.stepStartedEvents.stream()
+            .filter(it -> it.contexts().contains(contextId))
+            .filter(it -> it.stepIsRollbackFor().isPresent())
+            .toList();
+        var rollbackCompletedInContext = persistence.stepCompletedEvents.stream()
+            .filter(it -> it.contexts().contains(contextId))
+            .filter(it -> it.stepIsRollbackFor().isPresent())
+            .toList();
+
+        assertThat(rollbackStartedInContext)
+            .extracting(KanalarzPersistence.StepStartedEvent::stepIdentifier)
+            .containsExactly(
+                "rollback-only-steps:save-name:rollback",
+                "rollback-only-steps:log-failed-names-add:rollback"
+            );
+        assertThat(rollbackStartedInContext)
+            .extracting(KanalarzPersistence.StepStartedEvent::isRollbackMarker)
+            .containsOnly(false);
+
+        assertThat(rollbackCompletedInContext)
+            .extracting(KanalarzPersistence.StepCompletedEvent::stepIdentifier)
+            .containsExactly(
+                "rollback-only-steps:save-name:rollback",
+                "rollback-only-steps:log-failed-names-add:rollback"
+            );
+        assertThat(rollbackCompletedInContext)
+            .extracting(KanalarzPersistence.StepCompletedEvent::isRollbackMarker)
+            .containsOnly(false);
+
+        var rollbackOnlyMarkerStepStarted = persistence.stepStartedEvents.stream()
+            .filter(it -> it.contexts().contains(contextId))
+            .filter(it -> it.stepIdentifier().equals("rollback-only-steps:log-failed-names-add"))
+            .toList();
+        var rollbackOnlyMarkerStepCompleted = persistence.stepCompletedEvents.stream()
+            .filter(it -> it.contexts().contains(contextId))
+            .filter(it -> it.stepIdentifier().equals("rollback-only-steps:log-failed-names-add"))
+            .toList();
+
+        assertThat(rollbackOnlyMarkerStepStarted)
+            .extracting(KanalarzPersistence.StepStartedEvent::isRollbackMarker)
+            .containsOnly(true);
+        assertThat(rollbackOnlyMarkerStepCompleted)
+            .extracting(KanalarzPersistence.StepCompletedEvent::isRollbackMarker)
+            .containsOnly(true);
     }
 }

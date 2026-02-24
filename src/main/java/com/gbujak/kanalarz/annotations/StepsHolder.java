@@ -6,8 +6,7 @@ import org.springframework.aot.hint.annotation.Reflective;
 import java.lang.annotation.*;
 
 /**
- * Annotation that marks a spring bean as a holder of steps to be scanned for steps to register in the pipeline
- * library step cache.
+ * Mark a Spring bean as a holder of Kanalarz step/rollback methods.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
@@ -18,8 +17,9 @@ import java.lang.annotation.*;
 public @interface StepsHolder {
 
     /**
-     * Globally unique identifier for the step holder. <br><b>If you save the step info to a database and you change
-     * any step holder identifier you probably need a migration if any step from this holder has ever ran!</b>
+     * Globally unique identifier for this holder.
+     * <br><b>If step history is persisted, changing this identifier may require a data migration.</b>
+     * @return steps holder identifier
      */
     String value();
 }

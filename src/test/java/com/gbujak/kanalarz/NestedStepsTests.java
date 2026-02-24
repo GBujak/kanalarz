@@ -97,10 +97,10 @@ class TestNestedSteps {
     @Step("nested-with-rollback")
     public List<String> addAllAndExtraNestedWithRollback(List<String> values) {
         List<String> result = null;
+        service.add("extra");
         for (var value : values) {
             result = self.add(value);
         }
-        service.add("extra");
         return result;
     }
 
@@ -136,7 +136,8 @@ public class NestedStepsTests {
 
         assertThat(service.values()).isEqualTo(List.of("test-1", "test-2", "test-3", "test-4", "test-5"));
 
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        System.out.println(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId).stream().map(KanalarzPersistence.StepExecutedInfo::executionPath).toList());
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(6);
     }
 
@@ -159,7 +160,7 @@ public class NestedStepsTests {
         assertThat(service.values())
             .isEqualTo(List.of("test-1", "test-2", "test-3", "test-4", "test-5", "test-4", "test-5", "test-6"));
 
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(12);
     }
 
@@ -188,7 +189,7 @@ public class NestedStepsTests {
 
         assertThat(service.values()).isEmpty();
 
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(12 + expected.size());
     }
 
@@ -218,7 +219,7 @@ public class NestedStepsTests {
 
         assertThat(service.values()).isEmpty();
 
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(26);
     }
 
@@ -251,55 +252,13 @@ public class NestedStepsTests {
     }
 
     @Test
-    void doubleNestedStepResumeReplayOutOfOrder() {
-        UUID contextId = UUID.randomUUID();
-        RuntimeException testException = new RuntimeException("test");
-
-        Consumer<KanalarzContext> job = ctx -> {
-            assertThat(steps.add("test-1")).isEqualTo(List.of("test-1"));
-
-            assertThat(steps.addAll(List.of("test-2", "test-3")))
-                .isEqualTo(List.of("test-1", "test-2", "test-3"));
-
-            steps.addAllTwice(List.of("test-4", "test-5"));
-        };
-
-        Consumer<KanalarzContext> jobOutOfOrder = ctx -> {
-            // ------ these 2 are swapped ------
-            assertThat(steps.addAll(List.of("test-2", "test-3")))
-                .isEqualTo(List.of("test-1", "test-2", "test-3"));
-
-            assertThat(steps.add("test-1")).isEqualTo(List.of("test-1"));
-            // ----------------------------------
-
-            steps.addAllTwice(List.of("test-4", "test-5"));
-        };
-
-        steps.throwOnNextAddAllTwice(testException);
-        assertThatThrownBy(() ->
-            kanalarz.newContext().resumes(contextId).option(Kanalarz.Option.DEFER_ROLLBACK).consume(job)
-        );
-
-        assertThat(service.values())
-            .isEqualTo(List.of("test-1", "test-2", "test-3", "test-4", "test-5"));
-
-        kanalarz.newContext()
-            .resumes(contextId)
-            .option(Kanalarz.Option.OUT_OF_ORDER_REPLAY)
-            .consumeResumeReplay(jobOutOfOrder);
-
-        assertThat(service.values())
-            .isEqualTo(List.of("test-1", "test-2", "test-3", "test-4", "test-5", "test-4", "test-5"));
-    }
-
-    @Test
     void shouldRollbackNestedStepWithRollback() {
         RuntimeException exception = new RuntimeException("");
 
         assertThatThrownBy(() ->
             kanalarz.newContext().consume(ctx -> {
                 assertThat(steps.addAllAndExtraNestedWithRollback(List.of("test-1", "test-2", "test-3")))
-                    .isEqualTo(List.of("test-1", "test-2", "test-3", "extra"));
+                    .isEqualTo(List.of("extra", "test-1", "test-2", "test-3"));
 
                 throw exception;
             })

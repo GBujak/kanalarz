@@ -5,6 +5,7 @@ import kotlin.jvm.internal.Reflection;
 import kotlin.reflect.KClass;
 import kotlin.reflect.KFunction;
 import kotlin.reflect.KParameter;
+import kotlin.reflect.jvm.ReflectJvmMapping;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -16,6 +17,7 @@ import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @NullMarked
 class Utils {
@@ -159,16 +161,20 @@ class Utils {
     private static boolean isKotlinNonNullableType(Parameter parameter) {
         try {
             Method method = (Method) parameter.getDeclaringExecutable();
-            KClass<?> kClass = Reflection.getOrCreateKotlinClass(method.getDeclaringClass());
-
-            KFunction<?> kFunction = (KFunction<?>) kClass.getMembers().stream()
-                .filter(m -> m.getName().equals(method.getName()))
-                .findFirst()
-                .orElse(null);
+            KFunction<?> kFunction = resolveKotlinFunction(method);
 
             if (kFunction != null) {
                 int parameterIndex = java.util.Arrays.asList(method.getParameters()).indexOf(parameter);
-                KParameter kParameter = kFunction.getParameters().get(parameterIndex + 1); // +1 to account for the instance parameter
+                if (parameterIndex < 0) {
+                    return false;
+                }
+                List<KParameter> kotlinValueParameters = kFunction.getParameters().stream()
+                    .filter(p -> p.getKind() == KParameter.Kind.VALUE)
+                    .toList();
+                if (parameterIndex >= kotlinValueParameters.size()) {
+                    return false;
+                }
+                KParameter kParameter = kotlinValueParameters.get(parameterIndex);
                 return !kParameter.getType().isMarkedNullable();
             }
         } catch (Exception e) {
@@ -179,13 +185,7 @@ class Utils {
 
     private static boolean isKotlinNonNullableReturnType(Method method) {
         try {
-            KClass<?> kClass = Reflection.getOrCreateKotlinClass(method.getDeclaringClass());
-
-            // Get the Kotlin function corresponding to the method
-            KFunction<?> kFunction = (KFunction<?>) kClass.getMembers().stream()
-                .filter(m -> m.getName().equals(method.getName()))
-                .findFirst()
-                .orElse(null);
+            KFunction<?> kFunction = resolveKotlinFunction(method);
 
             if (kFunction != null) {
                 return !kFunction.getReturnType().isMarkedNullable();
@@ -194,6 +194,22 @@ class Utils {
             log.warn("Error trying to determine if a kotlin return type is nullable", e);
         }
         return false;
+    }
+
+    @Nullable
+    private static KFunction<?> resolveKotlinFunction(Method method) {
+        KFunction<?> directMatch = ReflectJvmMapping.getKotlinFunction(method);
+        if (directMatch != null) {
+            return directMatch;
+        }
+
+        KClass<?> kClass = Reflection.getOrCreateKotlinClass(method.getDeclaringClass());
+        return kClass.getMembers().stream()
+            .filter(KFunction.class::isInstance)
+            .map(KFunction.class::cast)
+            .filter(it -> Objects.equals(ReflectJvmMapping.getJavaMethod(it), method))
+            .findFirst()
+            .orElse(null);
     }
 
     static ArrayList<KanalarzSerialization.SerializeParameterInfo> makeSerializeParametersInfo(

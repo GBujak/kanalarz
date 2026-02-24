@@ -14,6 +14,7 @@ import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.ReflectionUtils;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.*;
@@ -80,17 +81,17 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
         proxyFactory.setProxyTargetClass(true);
         proxyFactory.addAdvice((MethodInterceptor) invocation -> {
             var method = invocation.getMethod();
-            Step step = AnnotatedElementUtils.getMergedAnnotation(method, Step.class);
-            RollbackOnly rollbackOnly = AnnotatedElementUtils.getMergedAnnotation(method, RollbackOnly.class);
+            Step step = getMergedMethodAnnotation(method, targetClass, Step.class);
+            RollbackOnly rollbackOnly = getMergedMethodAnnotation(method, targetClass, RollbackOnly.class);
             if (step == null && rollbackOnly == null) {
-                return method.invoke(target, invocation.getArguments());
+                return invocation.proceed();
             } else {
                 var kanalarz = kanalarzAtomicRef.get();
                 if (kanalarz == null) {
                     kanalarz = kanalarzProvider.getObject();
                     kanalarzAtomicRef.compareAndSet(null, kanalarz);
                 }
-                return kanalarz.handleMethodInvocation(target, invocation, stepsComponent, step, rollbackOnly);
+                return kanalarz.handleMethodInvocation(invocation, stepsComponent, step, rollbackOnly);
             }
         });
 
@@ -112,13 +113,13 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
         ReflectionUtils.doWithMethods(targetClass, methods::add);
 
         // sort so rollbacks are at the back so it's easier to register them in the KanalarzContext class
-        methods.sort(Comparator.comparing(it -> (Boolean) it.isAnnotationPresent(Rollback.class)));
+        methods.sort(Comparator.comparing(method -> hasMethodAnnotation(method, targetClass, Rollback.class)));
         
         for (var method : methods) {
-            var step = method.getAnnotation(Step.class);
-            var rollback = method.getAnnotation(Rollback.class);
-            var rollbackOnly = method.getAnnotation(RollbackOnly.class);
-            var returnIsSecret = method.getAnnotation(Secret.class) != null;
+            var step = getMergedMethodAnnotation(method, targetClass, Step.class);
+            var rollback = getMergedMethodAnnotation(method, targetClass, Rollback.class);
+            var rollbackOnly = getMergedMethodAnnotation(method, targetClass, RollbackOnly.class);
+            var returnIsSecret = hasMethodAnnotation(method, targetClass, Secret.class);
 
             if (step == null && rollback == null && rollbackOnly == null) {
                 continue;
@@ -165,5 +166,46 @@ class KanalarzBeanPostProcessor implements BeanPostProcessor {
                     .registerRollbackOnlyStep(target, method, stepsHolder, rollbackOnly, returnIsSecret);
             }
         }
+    }
+
+    private static <T extends Annotation> boolean hasMethodAnnotation(
+        Method method,
+        Class<?> targetClass,
+        Class<T> annotationType
+    ) {
+        return getMergedMethodAnnotation(method, targetClass, annotationType) != null;
+    }
+
+    @Nullable
+    private static <T extends Annotation> T getMergedMethodAnnotation(
+        Method method,
+        Class<?> targetClass,
+        Class<T> annotationType
+    ) {
+        var mergedAnnotation = AnnotatedElementUtils.getMergedAnnotation(method, annotationType);
+        if (mergedAnnotation != null) {
+            return mergedAnnotation;
+        }
+
+        var mostSpecificMethod = ClassUtils.getMostSpecificMethod(method, targetClass);
+        if (!mostSpecificMethod.equals(method)) {
+            mergedAnnotation = AnnotatedElementUtils.getMergedAnnotation(mostSpecificMethod, annotationType);
+            if (mergedAnnotation != null) {
+                return mergedAnnotation;
+            }
+        }
+
+        for (var iface : ClassUtils.getAllInterfacesForClassAsSet(targetClass)) {
+            var interfaceMethod = ReflectionUtils.findMethod(iface, method.getName(), method.getParameterTypes());
+            if (interfaceMethod == null) {
+                continue;
+            }
+            mergedAnnotation = AnnotatedElementUtils.getMergedAnnotation(interfaceMethod, annotationType);
+            if (mergedAnnotation != null) {
+                return mergedAnnotation;
+            }
+        }
+
+        return null;
     }
 }

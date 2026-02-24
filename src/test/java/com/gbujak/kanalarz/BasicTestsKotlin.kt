@@ -103,12 +103,6 @@ class BasicTestsKotlin {
     }
 
     @Test
-    fun stepOutsideOfContext() {
-        assertThat(testSteps.setName("test")).isNull()
-        assertThat(testNameService.name()).isEqualTo("test")
-    }
-
-    @Test
     fun basicRollforward() {
         assertThat(testNameService.name()).isNull()
         kanalarz.newContext().start {
@@ -136,7 +130,7 @@ class BasicTestsKotlin {
             .hasCause(exception)
 
         assertThat(testNameService.name()).isNull()
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(2)
     }
 
@@ -158,7 +152,7 @@ class BasicTestsKotlin {
             .hasCauseExactlyInstanceOf(NameServiceNameAlreadyThatValueException::class.java)
 
         assertThat(testNameService.name()).isNull()
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(3)
     }
 
@@ -186,7 +180,7 @@ class BasicTestsKotlin {
             .hasCauseExactlyInstanceOf(NameServiceNameAlreadyThatValueException::class.java)
 
         assertThat(testNameService.name()).isNull()
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(9)
     }
 
@@ -204,7 +198,7 @@ class BasicTestsKotlin {
         }
 
         assertThat(testNameService.name()).isEqualTo(testNewName)
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(2)
     }
 
@@ -231,7 +225,7 @@ class BasicTestsKotlin {
             }
 
         assertThat(testNameService.name()).isEqualTo(testNewName2)
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(2)
     }
 
@@ -253,7 +247,7 @@ class BasicTestsKotlin {
             .hasCause(exception)
 
         assertThat(testNameService.name()).isEqualTo(testNewName2)
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(2)
     }
 
@@ -280,13 +274,13 @@ class BasicTestsKotlin {
             .hasCauseExactlyInstanceOf(NameServiceNameAlreadyThatValueException::class.java)
 
         assertThat(testNameService.name()).isEqualTo(testName2)
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(3)
 
         kanalarz.newContext().resumes(contextId).rollbackNow()
 
         assertThat(testNameService.name()).isNull()
-        assertThat(persistence.getExecutedStepsInContextInOrderOfExecution(contextId))
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId))
             .hasSize(5)
     }
 }

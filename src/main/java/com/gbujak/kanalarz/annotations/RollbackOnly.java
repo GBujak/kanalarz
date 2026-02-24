@@ -6,24 +6,29 @@ import org.springframework.aot.hint.annotation.Reflective;
 import java.lang.annotation.*;
 
 /**
- * Annotation used to mark a rollback without a rollforward step. Using this is the same as defining a regular
- * step with an empty body and a rollback that injects every parameter of the rollforward step. Additionally,
- * metadata is given to your application that the rollforward is virtual so you may decide to hide it from the user.
+ * Mark a rollback-only operation that has no separate rollforward method.
+ * <p>
+ * Conceptually this behaves like a virtual step with an empty rollforward and this method as rollback.
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.METHOD)
+@Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
 @Inherited
 @Documented
 @Reflective
 @NullMarked
 public @interface RollbackOnly {
 
-    /** A globally-unique identifier for the step. <br><b>If you store the steps in a database you
-     * probably need a migration if you ever change any step's identifier if it has ever ran!</b> */
+    /**
+     * Globally unique identifier for the virtual step.
+     * <br><b>If history is persisted, changing this identifier may require a data migration.</b>
+     * @return virtual step identifier
+     */
     String value();
 
-    /** If this is set to false the rollback will be interrupted when this method throws. If set to true,
-     * the failure will be ignored and the rollback will continue. A step completed event will still be
-     * emitted notifying that this rollback step failed. */
+    /**
+     * If true, rollback errors from this method do not stop the overall rollback sequence.
+     * A failed rollback event is still emitted.
+     * @return true when rollback should be treated as fallible
+     */
     boolean fallible() default false;
 }

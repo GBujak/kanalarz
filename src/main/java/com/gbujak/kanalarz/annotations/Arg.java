@@ -14,6 +14,9 @@ import java.lang.annotation.*;
 @NullMarked
 public @interface Arg {
 
-    /** @return The name for the argument */
+    /**
+     * Name to use for this argument.
+     * @return argument name
+     */
     String value();
 }
