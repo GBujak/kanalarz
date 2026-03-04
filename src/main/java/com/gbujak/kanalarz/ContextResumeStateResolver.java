@@ -34,18 +34,13 @@ class ContextResumeStateResolver {
     @Nullable
     String resolveBasePath(UUID contextId) {
         String result = null;
-        boolean allNull = true;
 
         for (var step : replayableSteps) {
             var path = step.executionPath();
             var contextSegmentIndex = findContextSegmentIndex(path, contextId);
             if (contextSegmentIndex == -1) {
-                if (allNull) {
-                    continue;
-                }
-                throw inconsistentRootPaths(contextId);
+                continue;
             }
-            allNull = false;
 
             var basePath = reconstructBasePath(path, contextSegmentIndex);
             if (result != null && !result.equals(basePath)) {

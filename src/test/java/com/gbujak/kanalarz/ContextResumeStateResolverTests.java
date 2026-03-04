@@ -38,16 +38,15 @@ class ContextResumeStateResolverTests {
     }
 
     @Test
-    void shouldFailWhenSomeStepsDoNotContainContextIdPath() {
+    void shouldIgnoreStepsThatDoNotContainContextIdPath() {
         var contextId = UUID.randomUUID();
+        var basePath = "r.c-" + contextId;
         var resolver = new ContextResumeStateResolver(List.of(
-            stepWithPath("r.c-" + contextId + ".s0"),
+            stepWithPath(basePath + ".s0"),
             stepWithPath("r.s1")
         ));
 
-        assertThatThrownBy(() -> resolver.resolveBasePath(contextId))
-            .isExactlyInstanceOf(KanalarzException.KanalarzIllegalUsageException.class)
-            .hasMessageContaining("inconsistent root paths");
+        assertThat(resolver.resolveBasePath(contextId)).isEqualTo(basePath);
     }
 
     @Test

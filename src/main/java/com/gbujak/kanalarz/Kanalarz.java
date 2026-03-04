@@ -314,6 +314,8 @@ public class Kanalarz {
         EnumSet<Option> options,
         boolean resumeReplay
     ) {
+        throwIfNestedInsideSelf(resumesContext);
+
         if (resumeReplay && resumesContext == null) {
             throw new KanalarzException.KanalarzIllegalUsageException(
                 "Resume replay only makes sense when resuming some context! " +
@@ -378,11 +380,27 @@ public class Kanalarz {
         UUID resumesContext,
         EnumSet<Option> options
     ) {
+        throwIfNestedInsideSelf(resumesContext);
+
         try (
             var autoCloseableContext =
                 new AutoCloseableContext(metadata, resumesContext, options, null, null)
         ) {
             performRollback(autoCloseableContext.context(), null, options);
+        }
+    }
+
+    private static void throwIfNestedInsideSelf(@Nullable UUID contextId) {
+        if (contextId == null) {
+            return;
+        }
+
+        for (var stack = contextStackOrNull(); stack != null; stack = stack.parents()) {
+            if (stack.context().id().equals(contextId)) {
+                throw new KanalarzException.KanalarzIllegalUsageException(
+                    "Cannot start context [%s] nested inside itself.".formatted(contextId)
+                );
+            }
         }
     }
 
@@ -498,7 +516,7 @@ public class Kanalarz {
                 var executionPath = rollforward.executionPath() + ".r";
 
                 persistence.stepStarted(new KanalarzPersistence.StepStartedEvent(
-                    contextStack.contextIds(),
+                    rollforward.contexts(),
                     contextStack.stepIdOrThrow(),
                     contextStack.parentStepId(),
                     Optional.of(rollforward.stepId()),

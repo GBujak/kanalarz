@@ -524,21 +524,68 @@ public class NestedContextsTests {
         UUID childId = UUID.randomUUID();
         List<UUID> posts = new ArrayList<>();
 
-        kanalarz.newContext().consume(ctx ->
-            kanalarz.newContext().resumes(childId).consume(ctx2 -> {
-                posts.add(steps.submitPostA("outer-child"));
-                kanalarz.newContext().resumes(childId).consume(ctx3 -> {
-                    posts.add(steps.submitPostB("inner-child"));
-                });
-            })
-        );
+        assertThatThrownBy(() ->
+            kanalarz.newContext().consume(ctx ->
+                kanalarz.newContext().resumes(childId).consume(ctx2 -> {
+                    posts.add(steps.submitPostA("outer-child"));
+                    kanalarz.newContext().resumes(childId).consume(ctx3 -> {
+                        posts.add(steps.submitPostB("inner-child"));
+                    });
+                })
+            )
+        )
+            .isExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
+            .hasCauseExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
+            .hasRootCauseExactlyInstanceOf(KanalarzException.KanalarzIllegalUsageException.class)
+            .rootCause()
+            .hasMessageContaining("nested inside itself");
 
-        assertThat(service.postsA.get(posts.get(0))).isEqualTo("outer-child");
-        assertThat(service.postsB.get(posts.get(1))).isEqualTo("inner-child");
+        assertThat(posts).hasSize(1);
+        assertThat(service.postsA).isEmpty();
+        assertThat(service.postsB).isEmpty();
+    }
+
+    @Test
+    void parentResumeReplayShouldAlsoReplayNamedResumedChild() {
+        UUID parentId = UUID.randomUUID();
+        UUID childId = UUID.randomUUID();
+        AtomicBoolean shouldFail = new AtomicBoolean(true);
+
+        Consumer<KanalarzContext> job = ctx -> {
+            steps.submitPostA("parent-start");
+            kanalarz.newContext().resumes(childId).consume(child -> {
+                steps.submitPostB("child-step");
+            });
+
+            if (shouldFail.getAndSet(false)) {
+                throw new RuntimeException("fail-parent");
+            }
+
+            steps.submitPostA("parent-end");
+        };
 
         assertThatThrownBy(() ->
-            kanalarz.newContext().resumes(childId).consumeResumeReplay(ctx -> {})
-        ).isExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
-            .hasMessageContaining("Not all steps have been replayed");
+            kanalarz.newContext().resumes(parentId).option(Kanalarz.Option.DEFER_ROLLBACK).consume(job)
+        ).hasMessageContaining("fail-parent");
+
+        assertThat(service.postsA.values()).containsExactly("parent-start");
+        assertThat(service.postsB.values()).containsExactly("child-step");
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(childId))
+            .hasSize(1);
+
+        kanalarz.newContext().resumes(parentId).consumeResumeReplay(job);
+
+        assertThat(service.postsA.values()).containsExactlyInAnyOrder("parent-start", "parent-end");
+        assertThat(service.postsB.values()).containsExactly("child-step");
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(childId))
+            .hasSize(1);
+
+        kanalarz.newContext().resumes(childId).rollbackNow();
+        assertThat(service.postsA.values()).containsExactlyInAnyOrder("parent-start", "parent-end");
+        assertThat(service.postsB.values()).isEmpty();
+
+        kanalarz.newContext().resumes(parentId).rollbackNow();
+        assertThat(service.postsA.values()).isEmpty();
+        assertThat(service.postsB.values()).isEmpty();
     }
 }
