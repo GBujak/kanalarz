@@ -154,13 +154,12 @@ class StepReplayer {
 
     @Nullable
     String basePathForContextId(UUID contextId) {
-        var basePathEnding = ".c-" + contextId;
         String result = null;
         boolean allNull = true;
 
         for (var path : executionPathToStep.keySet()) {
-            var indexOf = path.indexOf(basePathEnding);
-            if (indexOf == -1) {
+            var contextSegmentIndex = findContextSegmentIndex(path, contextId);
+            if (contextSegmentIndex == -1) {
                 if (allNull) continue;
                 throw new KanalarzException.KanalarzIllegalUsageException(
                     "Tried to resume-replay context [%s] but the list of steps had inconsistent root paths!"
@@ -169,7 +168,7 @@ class StepReplayer {
             }
             allNull = false;
 
-            var basePath = path.substring(0, indexOf + basePathEnding.length());
+            var basePath = reconstructBasePath(path, contextSegmentIndex);
 
             if (result != null && !result.equals(basePath)) {
                 throw new KanalarzException.KanalarzIllegalUsageException(
@@ -182,5 +181,32 @@ class StepReplayer {
         }
 
         return result;
+    }
+
+    private int findContextSegmentIndex(String path, UUID contextId) {
+        var targetSegment = "c-" + contextId;
+        var pathSegments = path.split("\\.");
+        int result = -1;
+
+        for (int i = 0; i < pathSegments.length; i++) {
+            if (!pathSegments[i].equals(targetSegment)) {
+                continue;
+            }
+            if (result != -1) {
+                throw new KanalarzException.KanalarzIllegalUsageException(
+                    ("Tried to resume-replay context [%s] but its execution path is ambiguous because the same " +
+                        "context id appears multiple times in a single path!")
+                        .formatted(contextId)
+                );
+            }
+            result = i;
+        }
+
+        return result;
+    }
+
+    private String reconstructBasePath(String path, int contextSegmentIndex) {
+        var pathSegments = path.split("\\.");
+        return String.join(".", Arrays.copyOfRange(pathSegments, 0, contextSegmentIndex + 1));
     }
 }

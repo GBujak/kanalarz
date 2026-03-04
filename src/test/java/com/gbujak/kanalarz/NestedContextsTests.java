@@ -425,4 +425,102 @@ public class NestedContextsTests {
         assertThat(service.postsB).hasSize(3);
         assertThat(service.postsA.get(child1Posts.get(2))).isEqualTo("after-resume");
     }
+
+    @Test
+    void childWithOnlyNestedStepsShouldBeAbleToBeReplayedOutsideOfTheParent() {
+        UUID childId = UUID.randomUUID();
+        List<UUID> posts = new ArrayList<>();
+
+        kanalarz.newContext().consume(ctx -> {
+            posts.add(steps.submitPostA("parent"));
+            kanalarz.newContext().resumes(childId).consume(ctx2 ->
+                kanalarz.newContext().consume(ctx3 -> {
+                    posts.add(steps.submitPostA("child"));
+                    posts.add(steps.submitPostB("child"));
+                })
+            );
+            posts.add(steps.submitPostB("parent"));
+        });
+
+        assertThat(service.postsA.get(posts.get(0))).isEqualTo("parent");
+        assertThat(service.postsA.get(posts.get(1))).isEqualTo("child");
+        assertThat(service.postsA).hasSize(2);
+
+        assertThat(service.postsB.get(posts.get(2))).isEqualTo("child");
+        assertThat(service.postsB.get(posts.get(3))).isEqualTo("parent");
+        assertThat(service.postsB).hasSize(2);
+
+        kanalarz.newContext().resumes(childId).consumeResumeReplay(ctx -> {
+            kanalarz.newContext().consume(ctx2 -> {
+                steps.submitPostA("child");
+                steps.submitPostB("child");
+            });
+            posts.add(steps.submitPostA("after-resume"));
+        });
+
+        assertThat(service.postsA).hasSize(3);
+        assertThat(service.postsB).hasSize(2);
+        assertThat(service.postsA.get(posts.get(4))).isEqualTo("after-resume");
+    }
+
+    @Test
+    void replayingOneNamedChildShouldIgnoreAnotherNamedSibling() {
+        UUID childAId = UUID.randomUUID();
+        UUID childBId = UUID.randomUUID();
+        List<UUID> childAPosts = new ArrayList<>();
+        List<UUID> childBPosts = new ArrayList<>();
+
+        kanalarz.newContext().consume(ctx -> {
+            kanalarz.newContext().resumes(childAId).consume(ctx2 -> {
+                childAPosts.add(steps.submitPostA("child"));
+                childAPosts.add(steps.submitPostB("child"));
+            });
+            kanalarz.newContext().resumes(childBId).consume(ctx2 -> {
+                childBPosts.add(steps.submitPostA("child"));
+                childBPosts.add(steps.submitPostB("child"));
+            });
+        });
+
+        assertThat(service.postsA).hasSize(2);
+        assertThat(service.postsB).hasSize(2);
+        assertThat(service.postsA.get(childAPosts.get(0))).isEqualTo("child");
+        assertThat(service.postsA.get(childBPosts.get(0))).isEqualTo("child");
+        assertThat(service.postsB.get(childAPosts.get(1))).isEqualTo("child");
+        assertThat(service.postsB.get(childBPosts.get(1))).isEqualTo("child");
+
+        kanalarz.newContext().resumes(childAId).consumeResumeReplay(ctx -> {
+            steps.submitPostA("child");
+            steps.submitPostB("child");
+            childAPosts.add(steps.submitPostA("after-resume"));
+        });
+
+        assertThat(service.postsA).hasSize(3);
+        assertThat(service.postsB).hasSize(2);
+        assertThat(service.postsA.get(childAPosts.get(2))).isEqualTo("after-resume");
+        assertThat(service.postsA.get(childBPosts.get(0))).isEqualTo("child");
+        assertThat(service.postsB.get(childBPosts.get(1))).isEqualTo("child");
+    }
+
+    @Test
+    void replayingSameNamedChildNestedInsideItselfShouldFailClearly() {
+        UUID childId = UUID.randomUUID();
+        List<UUID> posts = new ArrayList<>();
+
+        kanalarz.newContext().consume(ctx ->
+            kanalarz.newContext().resumes(childId).consume(ctx2 -> {
+                posts.add(steps.submitPostA("outer-child"));
+                kanalarz.newContext().resumes(childId).consume(ctx3 -> {
+                    posts.add(steps.submitPostB("inner-child"));
+                });
+            })
+        );
+
+        assertThat(service.postsA.get(posts.get(0))).isEqualTo("outer-child");
+        assertThat(service.postsB.get(posts.get(1))).isEqualTo("inner-child");
+
+        assertThatThrownBy(() ->
+            kanalarz.newContext().resumes(childId).consumeResumeReplay(ctx -> {})
+        ).isExactlyInstanceOf(KanalarzException.KanalarzIllegalUsageException.class)
+            .hasMessageContaining("appears multiple times");
+    }
 }

@@ -100,6 +100,53 @@ class StepReplayerBasePathTests {
         assertThat(replayer.basePathForContextId(contextId)).isNull();
     }
 
+    @Test
+    void shouldFailWhenContextIdAppearsTwiceInSingleExecutionPath() {
+        var contextId = UUID.randomUUID();
+        var replayer = new StepReplayer(
+            List.of(
+                stepWithPath("r.c-" + contextId + ".s0.c-" + contextId + ".s1")
+            ),
+            NOOP_SERIALIZATION,
+            new KanalarzStepsRegistry()
+        );
+
+        assertThatThrownBy(() -> replayer.basePathForContextId(contextId))
+            .isExactlyInstanceOf(KanalarzException.KanalarzIllegalUsageException.class)
+            .hasMessageContaining("appears multiple times");
+    }
+
+    @Test
+    void shouldReturnBasePathForNestedContextSegment() {
+        var contextId = UUID.randomUUID();
+        var replayer = new StepReplayer(
+            List.of(
+                stepWithPath("r.s0.c-" + contextId + ".s1")
+            ),
+            NOOP_SERIALIZATION,
+            new KanalarzStepsRegistry()
+        );
+
+        assertThat(replayer.basePathForContextId(contextId)).isEqualTo("r.s0.c-" + contextId);
+    }
+
+    @Test
+    void shouldReturnConsistentBasePathWhenOnlyDescendantStepsExist() {
+        var contextId = UUID.randomUUID();
+        var otherContextId = UUID.randomUUID();
+        var basePath = "r.s0.c-" + contextId;
+        var replayer = new StepReplayer(
+            List.of(
+                stepWithPath(basePath + ".s0"),
+                stepWithPath(basePath + ".s1.c-" + otherContextId + ".s0")
+            ),
+            NOOP_SERIALIZATION,
+            new KanalarzStepsRegistry()
+        );
+
+        assertThat(replayer.basePathForContextId(contextId)).isEqualTo(basePath);
+    }
+
     private static KanalarzPersistence.StepExecutedInfo stepWithPath(String executionPath) {
         return new KanalarzPersistence.StepExecutedInfo(
             List.of(UUID.randomUUID()),
