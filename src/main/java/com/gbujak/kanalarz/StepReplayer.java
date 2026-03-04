@@ -31,16 +31,8 @@ class StepReplayer {
 
         this.executionPathToStep = new LinkedHashMap<>(steps.size());
         this.replayed = new HashSet<>(steps.size());
-
-        Set<UUID> rolledBack =
-            steps.stream()
-                .flatMap(it -> it.wasRollbackFor().stream())
-                .collect(Collectors.toSet());
-
         for (var step : steps) {
-            if (step.wasRollbackFor().isEmpty() && !rolledBack.contains(step.stepId())) {
-                executionPathToStep.put(step.executionPath(), step);
-            }
+            executionPathToStep.put(step.executionPath(), step);
         }
     }
 
@@ -150,63 +142,5 @@ class StepReplayer {
         executionPathToStep.keySet().stream()
             .filter(path -> path.startsWith(prefix))
             .forEach(replayed::add);
-    }
-
-    @Nullable
-    String basePathForContextId(UUID contextId) {
-        String result = null;
-        boolean allNull = true;
-
-        for (var path : executionPathToStep.keySet()) {
-            var contextSegmentIndex = findContextSegmentIndex(path, contextId);
-            if (contextSegmentIndex == -1) {
-                if (allNull) continue;
-                throw new KanalarzException.KanalarzIllegalUsageException(
-                    "Tried to resume-replay context [%s] but the list of steps had inconsistent root paths!"
-                        .formatted(contextId)
-                );
-            }
-            allNull = false;
-
-            var basePath = reconstructBasePath(path, contextSegmentIndex);
-
-            if (result != null && !result.equals(basePath)) {
-                throw new KanalarzException.KanalarzIllegalUsageException(
-                    "Tried to resume-replay context [%s] but the list of steps had inconsistent root paths!"
-                        .formatted(contextId)
-                );
-            }
-
-            result = basePath;
-        }
-
-        return result;
-    }
-
-    private int findContextSegmentIndex(String path, UUID contextId) {
-        var targetSegment = "c-" + contextId;
-        var pathSegments = path.split("\\.");
-        int result = -1;
-
-        for (int i = 0; i < pathSegments.length; i++) {
-            if (!pathSegments[i].equals(targetSegment)) {
-                continue;
-            }
-            if (result != -1) {
-                throw new KanalarzException.KanalarzIllegalUsageException(
-                    ("Tried to resume-replay context [%s] but its execution path is ambiguous because the same " +
-                        "context id appears multiple times in a single path!")
-                        .formatted(contextId)
-                );
-            }
-            result = i;
-        }
-
-        return result;
-    }
-
-    private String reconstructBasePath(String path, int contextSegmentIndex) {
-        var pathSegments = path.split("\\.");
-        return String.join(".", Arrays.copyOfRange(pathSegments, 0, contextSegmentIndex + 1));
     }
 }

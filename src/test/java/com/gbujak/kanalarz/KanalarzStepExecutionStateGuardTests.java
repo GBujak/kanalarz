@@ -57,7 +57,7 @@ class KanalarzStepExecutionStateGuardTests {
 
     @Test
     void shouldRejectStepExecutionWhenContextWasCancelled() {
-        var context = new KanalarzContext(UUID.randomUUID(), EnumSet.noneOf(Kanalarz.Option.class), null);
+        var context = new KanalarzContext(UUID.randomUUID(), EnumSet.noneOf(Kanalarz.Option.class), null, null);
         context.moveState(KanalarzContext.State.RUNNING, KanalarzContext.State.CANCELLED);
 
         assertThatThrownBy(() -> invokeHandleInContextMethodExecution(context))
@@ -68,7 +68,7 @@ class KanalarzStepExecutionStateGuardTests {
 
     @Test
     void shouldRejectStepExecutionWhenContextWasCancelledWithForcedDeferredRollback() {
-        var context = new KanalarzContext(UUID.randomUUID(), EnumSet.noneOf(Kanalarz.Option.class), null);
+        var context = new KanalarzContext(UUID.randomUUID(), EnumSet.noneOf(Kanalarz.Option.class), null, null);
         context.moveState(KanalarzContext.State.RUNNING, KanalarzContext.State.CANCELLED_FORCE_DEFER_ROLLBACK);
 
         assertThatThrownBy(() -> invokeHandleInContextMethodExecution(context))

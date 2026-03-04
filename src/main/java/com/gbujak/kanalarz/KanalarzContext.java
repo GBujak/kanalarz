@@ -25,7 +25,8 @@ public class KanalarzContext {
     KanalarzContext(
         @Nullable UUID resumesId,
         EnumSet<Kanalarz.Option> options,
-        @Nullable StepReplayer stepReplayer
+        @Nullable StepReplayer stepReplayer,
+        @Nullable String restoredBasePath
     ) {
         this.id = resumesId != null
             ? resumesId
@@ -36,15 +37,10 @@ public class KanalarzContext {
         this.metadata = new ConcurrentHashMap<>();
         this.state = new AtomicReference<>(State.RUNNING);
 
-        var basePath =
-            resumesId != null && stepReplayer != null
-                ? stepReplayer.basePathForContextId(resumesId)
-                : null;
-
         this.executionContext =
             Kanalarz.contextStack()
                 .map(contextStack -> contextStack.context().subContextExecution(resumesId))
-                .orElse(basePath != null ? new ExecutionContext(basePath) : new ExecutionContext());
+                .orElse(restoredBasePath != null ? new ExecutionContext(restoredBasePath) : new ExecutionContext());
     }
 
     private KanalarzContext(KanalarzContext other, ExecutionContext executionContext) {

@@ -321,14 +321,27 @@ public class Kanalarz {
             );
         }
 
-        var replayer =
-            resumeReplay
-                ? createStepReplayer(resumesContext, options)
-                : null;
+        StepReplayer replayer = null;
+        String restoredBasePath = null;
+
+        if (resumesContext != null && (resumeReplay || contextStack().isEmpty())) {
+            var executedSteps = persistence.getExecutedStepsInContextInOrderOfExecutionStarted(resumesContext);
+            var resumeStateResolver = new ContextResumeStateResolver(executedSteps);
+            var resumeState = resumeStateResolver.resolve(resumesContext);
+            if (!resumeReplay && resumeState.basePath() == null) {
+                resumeState = new ContextResumeState("r.c-" + resumesContext);
+            }
+
+            replayer =
+                resumeReplay
+                    ? new StepReplayer(resumeStateResolver.replayable(), serialization, stepsRegistry)
+                    : null;
+            restoredBasePath = resumeState.basePath();
+        }
 
         try (
             var autoCloseableContext =
-                new AutoCloseableContext(metadata, resumesContext, options, replayer)
+                new AutoCloseableContext(metadata, resumesContext, options, replayer, restoredBasePath)
         ) {
             try {
 
@@ -361,11 +374,6 @@ public class Kanalarz {
         }
     }
 
-    private StepReplayer createStepReplayer(UUID resumesContext, EnumSet<Option> options) {
-        var executedSteps = persistence.getExecutedStepsInContextInOrderOfExecutionStarted(resumesContext);
-        return new StepReplayer(executedSteps, serialization, stepsRegistry);
-    }
-
     private void rollbackInContext(
         Map<String, String> metadata,
         UUID resumesContext,
@@ -373,7 +381,7 @@ public class Kanalarz {
     ) {
         try (
             var autoCloseableContext =
-                new AutoCloseableContext(metadata, resumesContext, options, null)
+                new AutoCloseableContext(metadata, resumesContext, options, null, null)
         ) {
             performRollback(autoCloseableContext.context(), null, options);
         }
@@ -879,14 +887,16 @@ public class Kanalarz {
             Map<String, String> metadata,
             @Nullable UUID resumesContext,
             EnumSet<Option> options,
-            @Nullable StepReplayer stepReplayer
+            @Nullable StepReplayer stepReplayer,
+            @Nullable String restoredBasePath
         ) {
             context = new KanalarzContext(
                 resumesContext,
                 options,
                 contextStack()
                     .map(stack -> stack.context.stepReplayer())
-                    .orElse(stepReplayer)
+                    .orElse(stepReplayer),
+                restoredBasePath
             );
             context.putAllMetadata(metadata);
             kanalarzContextThreadLocal.set(new ContextStack(context, contextStackOrNull()));
