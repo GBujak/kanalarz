@@ -142,6 +142,15 @@ public class Kanalarz {
         KanalarzContext context
     ) {
 
+        switch (context.state()) {
+            case null -> {}
+            case RUNNING -> {}
+            case CANCELLED ->
+                throw new KanalarzException.KanalarzContextCancelledException(false);
+            case CANCELLED_FORCE_DEFER_ROLLBACK ->
+                throw new KanalarzException.KanalarzContextCancelledException(true);
+        }
+
         StepInfoClasses.StepInfo stepInfo;
         String stepIdentifier;
 
@@ -766,8 +775,6 @@ public class Kanalarz {
                         return;
                     }
                 }
-                case POISONED ->
-                    throw new IllegalStateException("Context [%s] has been poisoned.".formatted(contextId));
                 case CANCELLED,
                      CANCELLED_FORCE_DEFER_ROLLBACK ->
                     throw new IllegalStateException("Context [%s] has already been cancelled.".formatted(contextId));

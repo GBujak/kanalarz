@@ -194,8 +194,6 @@ public class KanalarzContext {
                 throw new KanalarzException.KanalarzContextCancelledException(false);
             case CANCELLED_FORCE_DEFER_ROLLBACK ->
                 throw new KanalarzException.KanalarzContextCancelledException(true);
-            case POISONED ->
-                throw new KanalarzException.KanalarzContextPoisonedException();
         }
     }
 
@@ -209,8 +207,6 @@ public class KanalarzContext {
         CANCELLED,
         /** Context has been cancelled and rollback is forcibly deferred. */
         CANCELLED_FORCE_DEFER_ROLLBACK,
-        /** Context cannot continue because replay encountered a fatal mismatch. */
-        POISONED,
     }
 
     /**
