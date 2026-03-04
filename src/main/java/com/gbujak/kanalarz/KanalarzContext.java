@@ -38,9 +38,11 @@ public class KanalarzContext {
         this.state = new AtomicReference<>(State.RUNNING);
 
         this.executionContext =
-            Kanalarz.contextStack()
-                .map(contextStack -> contextStack.context().subContextExecution(resumesId))
-                .orElse(restoredBasePath != null ? new ExecutionContext(restoredBasePath) : new ExecutionContext());
+            restoredBasePath != null
+                ? new ExecutionContext(restoredBasePath)
+                : Kanalarz.contextStack()
+                    .map(contextStack -> contextStack.context().subContextExecution(resumesId))
+                    .orElse(new ExecutionContext());
     }
 
     private KanalarzContext(KanalarzContext other, ExecutionContext executionContext) {

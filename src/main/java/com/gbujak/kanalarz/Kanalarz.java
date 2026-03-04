@@ -321,10 +321,10 @@ public class Kanalarz {
             );
         }
 
-        StepReplayer replayer = null;
         String restoredBasePath = null;
+        StepReplayer replayer = null;
 
-        if (resumesContext != null && (resumeReplay || contextStack().isEmpty())) {
+        if (resumesContext != null) {
             var executedSteps = persistence.getExecutedStepsInContextInOrderOfExecutionStarted(resumesContext);
             var resumeStateResolver = new ContextResumeStateResolver(executedSteps);
             var resumeState = resumeStateResolver.resolve(resumesContext);
@@ -332,11 +332,10 @@ public class Kanalarz {
                 resumeState = new ContextResumeState("r.c-" + resumesContext);
             }
 
-            replayer =
-                resumeReplay
-                    ? new StepReplayer(resumeStateResolver.replayable(), serialization, stepsRegistry)
-                    : null;
             restoredBasePath = resumeState.basePath();
+            if (resumeReplay) {
+                replayer = new StepReplayer(resumeStateResolver.replayable(), serialization, stepsRegistry);
+            }
         }
 
         try (

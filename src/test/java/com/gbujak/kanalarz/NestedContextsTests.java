@@ -464,6 +464,24 @@ public class NestedContextsTests {
     }
 
     @Test
+    void resumedNamedContextInsideParentShouldKeepItsOwnPersistedPath() {
+        UUID childId = UUID.randomUUID();
+
+        kanalarz.newContext().resumes(childId).consume(ctx -> steps.submitPostA("seed"));
+
+        kanalarz.newContext().consume(ctx -> {
+            steps.submitPostA("parent");
+            kanalarz.newContext().resumes(childId).consume(ctx2 -> steps.submitPostB("child"));
+        });
+
+        assertThat(
+            persistence.getExecutedStepsInContextInOrderOfExecutionStarted(childId).stream()
+                .map(KanalarzPersistence.StepExecutedInfo::executionPath)
+                .toList()
+        ).allMatch(it -> it.startsWith("r.c-" + childId + "."));
+    }
+
+    @Test
     void replayingOneNamedChildShouldIgnoreAnotherNamedSibling() {
         UUID childAId = UUID.randomUUID();
         UUID childBId = UUID.randomUUID();
@@ -520,7 +538,7 @@ public class NestedContextsTests {
 
         assertThatThrownBy(() ->
             kanalarz.newContext().resumes(childId).consumeResumeReplay(ctx -> {})
-        ).isExactlyInstanceOf(KanalarzException.KanalarzIllegalUsageException.class)
-            .hasMessageContaining("appears multiple times");
+        ).isExactlyInstanceOf(KanalarzException.KanalarzThrownOutsideOfStepException.class)
+            .hasMessageContaining("Not all steps have been replayed");
     }
 }
