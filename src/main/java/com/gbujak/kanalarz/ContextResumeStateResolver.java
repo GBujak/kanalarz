@@ -2,6 +2,7 @@ package com.gbujak.kanalarz;
 
 import com.gbujak.kanalarz.KanalarzPersistence.StepExecutedInfo;
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.List;
@@ -15,26 +16,23 @@ class ContextResumeStateResolver {
     private final List<StepExecutedInfo> replayableSteps;
 
     ContextResumeStateResolver(List<StepExecutedInfo> steps) {
-        this.replayableSteps = replayableSteps(steps);
+        Set<UUID> rolledBack =
+            steps.stream()
+                .flatMap(it -> it.wasRollbackFor().stream())
+                .collect(Collectors.toSet());
+
+        this.replayableSteps = steps.stream()
+            .filter(it -> it.wasRollbackFor().isEmpty())
+            .filter(it -> !rolledBack.contains(it.stepId()))
+            .toList();
     }
 
     List<StepExecutedInfo> replayable() {
         return replayableSteps;
     }
 
-    private static List<StepExecutedInfo> replayableSteps(List<StepExecutedInfo> steps) {
-        Set<UUID> rolledBack =
-            steps.stream()
-                .flatMap(it -> it.wasRollbackFor().stream())
-                .collect(Collectors.toSet());
-
-        return steps.stream()
-            .filter(it -> it.wasRollbackFor().isEmpty())
-            .filter(it -> !rolledBack.contains(it.stepId()))
-            .toList();
-    }
-
-    ContextResumeState resolve(UUID contextId) {
+    @Nullable
+    String resolveBasePath(UUID contextId) {
         String result = null;
         boolean allNull = true;
 
@@ -57,7 +55,7 @@ class ContextResumeStateResolver {
             result = basePath;
         }
 
-        return new ContextResumeState(result);
+        return result;
     }
 
     private int findContextSegmentIndex(String path, UUID contextId) {

@@ -327,12 +327,12 @@ public class Kanalarz {
         if (resumesContext != null) {
             var executedSteps = persistence.getExecutedStepsInContextInOrderOfExecutionStarted(resumesContext);
             var resumeStateResolver = new ContextResumeStateResolver(executedSteps);
-            var resumeState = resumeStateResolver.resolve(resumesContext);
-            if (!resumeReplay && resumeState.basePath() == null) {
-                resumeState = new ContextResumeState("r.c-" + resumesContext);
+            var resumeBasePath = resumeStateResolver.resolveBasePath(resumesContext);
+            if (!resumeReplay && resumeBasePath == null) {
+                resumeBasePath = "r.c-" + resumesContext;
             }
 
-            restoredBasePath = resumeState.basePath();
+            restoredBasePath = resumeBasePath;
             if (resumeReplay) {
                 replayer = new StepReplayer(resumeStateResolver.replayable(), serialization, stepsRegistry);
             }

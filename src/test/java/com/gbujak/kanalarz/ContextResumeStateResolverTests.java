@@ -21,7 +21,7 @@ class ContextResumeStateResolverTests {
             stepWithPath(basePath + ".s1.s0")
         ));
 
-        assertThat(resolver.resolve(contextId).basePath()).isEqualTo(basePath);
+        assertThat(resolver.resolveBasePath(contextId)).isEqualTo(basePath);
     }
 
     @Test
@@ -32,7 +32,7 @@ class ContextResumeStateResolverTests {
             stepWithPath("another-root.c-" + contextId + ".s0")
         ));
 
-        assertThatThrownBy(() -> resolver.resolve(contextId))
+        assertThatThrownBy(() -> resolver.resolveBasePath(contextId))
             .isExactlyInstanceOf(KanalarzException.KanalarzIllegalUsageException.class)
             .hasMessageContaining("inconsistent root paths");
     }
@@ -45,7 +45,7 @@ class ContextResumeStateResolverTests {
             stepWithPath("r.s1")
         ));
 
-        assertThatThrownBy(() -> resolver.resolve(contextId))
+        assertThatThrownBy(() -> resolver.resolveBasePath(contextId))
             .isExactlyInstanceOf(KanalarzException.KanalarzIllegalUsageException.class)
             .hasMessageContaining("inconsistent root paths");
     }
@@ -58,7 +58,7 @@ class ContextResumeStateResolverTests {
             stepWithPath("r.s1")
         ));
 
-        assertThat(resolver.resolve(contextId).basePath()).isNull();
+        assertThat(resolver.resolveBasePath(contextId)).isNull();
     }
 
     @Test
@@ -68,7 +68,7 @@ class ContextResumeStateResolverTests {
             stepWithPath("r.c-" + contextId + ".s0.c-" + contextId + ".s1")
         ));
 
-        assertThatThrownBy(() -> resolver.resolve(contextId))
+        assertThatThrownBy(() -> resolver.resolveBasePath(contextId))
             .isExactlyInstanceOf(KanalarzException.KanalarzIllegalUsageException.class)
             .hasMessageContaining("appears multiple times");
     }
@@ -80,7 +80,7 @@ class ContextResumeStateResolverTests {
             stepWithPath("r.s0.c-" + contextId + ".s1")
         ));
 
-        assertThat(resolver.resolve(contextId).basePath()).isEqualTo("r.s0.c-" + contextId);
+        assertThat(resolver.resolveBasePath(contextId)).isEqualTo("r.s0.c-" + contextId);
     }
 
     @Test
@@ -93,7 +93,7 @@ class ContextResumeStateResolverTests {
             stepWithPath(basePath + ".s1.c-" + otherContextId + ".s0")
         ));
 
-        assertThat(resolver.resolve(contextId).basePath()).isEqualTo(basePath);
+        assertThat(resolver.resolveBasePath(contextId)).isEqualTo(basePath);
     }
 
     private static KanalarzPersistence.StepExecutedInfo stepWithPath(String executionPath) {
