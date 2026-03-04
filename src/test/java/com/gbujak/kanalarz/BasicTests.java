@@ -177,6 +177,20 @@ public class BasicTests {
     }
 
     @Test
+    void resumedContextShouldKeepNamedContextExecutionPrefixWithoutReplay() {
+        var contextId = UUID.randomUUID();
+
+        kanalarz.newContext().resumes(contextId).consume(ctx -> testSteps.setName("test"));
+        kanalarz.newContext().resumes(contextId).consume(ctx -> testSteps.setName("test2"));
+
+        assertThat(
+            persistence.getExecutedStepsInContextInOrderOfExecutionStarted(contextId).stream()
+                .map(KanalarzPersistence.StepExecutedInfo::executionPath)
+                .toList()
+        ).allMatch(it -> it.startsWith("r.c-" + contextId + "."));
+    }
+
+    @Test
     void basicFallibleStepTest() {
         var contextId = UUID.randomUUID();
         var testNewName = "test";

@@ -142,6 +142,15 @@ public class Kanalarz {
         KanalarzContext context
     ) {
 
+        switch (context.state()) {
+            case null -> {}
+            case RUNNING -> {}
+            case CANCELLED ->
+                throw new KanalarzException.KanalarzContextCancelledException(false);
+            case CANCELLED_FORCE_DEFER_ROLLBACK ->
+                throw new KanalarzException.KanalarzContextCancelledException(true);
+        }
+
         StepInfoClasses.StepInfo stepInfo;
         String stepIdentifier;
 
@@ -312,14 +321,26 @@ public class Kanalarz {
             );
         }
 
-        var replayer =
-            resumeReplay
-                ? createStepReplayer(resumesContext, options)
-                : null;
+        String restoredBasePath = null;
+        StepReplayer replayer = null;
+
+        if (resumesContext != null) {
+            var executedSteps = persistence.getExecutedStepsInContextInOrderOfExecutionStarted(resumesContext);
+            var resumeStateResolver = new ContextResumeStateResolver(executedSteps);
+            var resumeBasePath = resumeStateResolver.resolveBasePath(resumesContext);
+            if (!resumeReplay && resumeBasePath == null) {
+                resumeBasePath = "r.c-" + resumesContext;
+            }
+
+            restoredBasePath = resumeBasePath;
+            if (resumeReplay) {
+                replayer = new StepReplayer(resumeStateResolver.replayable(), serialization, stepsRegistry);
+            }
+        }
 
         try (
             var autoCloseableContext =
-                new AutoCloseableContext(metadata, resumesContext, options, replayer)
+                new AutoCloseableContext(metadata, resumesContext, options, replayer, restoredBasePath)
         ) {
             try {
 
@@ -352,11 +373,6 @@ public class Kanalarz {
         }
     }
 
-    private StepReplayer createStepReplayer(UUID resumesContext, EnumSet<Option> options) {
-        var executedSteps = persistence.getExecutedStepsInContextInOrderOfExecutionStarted(resumesContext);
-        return new StepReplayer(executedSteps, serialization, stepsRegistry);
-    }
-
     private void rollbackInContext(
         Map<String, String> metadata,
         UUID resumesContext,
@@ -364,7 +380,7 @@ public class Kanalarz {
     ) {
         try (
             var autoCloseableContext =
-                new AutoCloseableContext(metadata, resumesContext, options, null)
+                new AutoCloseableContext(metadata, resumesContext, options, null, null)
         ) {
             performRollback(autoCloseableContext.context(), null, options);
         }
@@ -766,8 +782,6 @@ public class Kanalarz {
                         return;
                     }
                 }
-                case POISONED ->
-                    throw new IllegalStateException("Context [%s] has been poisoned.".formatted(contextId));
                 case CANCELLED,
                      CANCELLED_FORCE_DEFER_ROLLBACK ->
                     throw new IllegalStateException("Context [%s] has already been cancelled.".formatted(contextId));
@@ -872,14 +886,16 @@ public class Kanalarz {
             Map<String, String> metadata,
             @Nullable UUID resumesContext,
             EnumSet<Option> options,
-            @Nullable StepReplayer stepReplayer
+            @Nullable StepReplayer stepReplayer,
+            @Nullable String restoredBasePath
         ) {
             context = new KanalarzContext(
                 resumesContext,
                 options,
                 contextStack()
                     .map(stack -> stack.context.stepReplayer())
-                    .orElse(stepReplayer)
+                    .orElse(stepReplayer),
+                restoredBasePath
             );
             context.putAllMetadata(metadata);
             kanalarzContextThreadLocal.set(new ContextStack(context, contextStackOrNull()));

@@ -17,8 +17,8 @@ public class TestPersistence implements KanalarzPersistence {
 
     private static final Logger log = LoggerFactory.getLogger(TestPersistence.class);
 
-    public List<StepStartedEvent> stepStartedEvents = Collections.synchronizedList(new ArrayList<>());
-    public List<StepCompletedEvent> stepCompletedEvents = Collections.synchronizedList(new ArrayList<>());
+    public final List<StepStartedEvent> stepStartedEvents = Collections.synchronizedList(new ArrayList<>());
+    public final List<StepCompletedEvent> stepCompletedEvents = Collections.synchronizedList(new ArrayList<>());
 
     @Override
     public void stepStarted(StepStartedEvent stepStartedEvent) {
@@ -32,9 +32,12 @@ public class TestPersistence implements KanalarzPersistence {
 
     @Override
     public List<StepExecutedInfo> getExecutedStepsInContextInOrderOfExecutionStarted(UUID contextId) {
-        return stepStartedEvents.stream()
+        var starteds = List.copyOf(stepStartedEvents);
+        var completeds = List.copyOf(stepCompletedEvents);
+
+        return starteds.stream()
             .filter(it -> it.contexts().contains(contextId))
-            .map(started -> stepCompletedEvents.stream().filter(completed ->
+            .map(started -> completeds.stream().filter(completed ->
                 completed.stepId().equals(started.stepId())).findFirst().orElseThrow()
             )
             .map(it -> new StepExecutedInfo(

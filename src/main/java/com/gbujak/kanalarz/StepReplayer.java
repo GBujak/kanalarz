@@ -31,16 +31,8 @@ class StepReplayer {
 
         this.executionPathToStep = new LinkedHashMap<>(steps.size());
         this.replayed = new HashSet<>(steps.size());
-
-        Set<UUID> rolledBack =
-            steps.stream()
-                .flatMap(it -> it.wasRollbackFor().stream())
-                .collect(Collectors.toSet());
-
         for (var step : steps) {
-            if (step.wasRollbackFor().isEmpty() && !rolledBack.contains(step.stepId())) {
-                executionPathToStep.put(step.executionPath(), step);
-            }
+            executionPathToStep.put(step.executionPath(), step);
         }
     }
 
@@ -150,37 +142,5 @@ class StepReplayer {
         executionPathToStep.keySet().stream()
             .filter(path -> path.startsWith(prefix))
             .forEach(replayed::add);
-    }
-
-    @Nullable
-    String basePathForContextId(UUID contextId) {
-        var basePathEnding = ".c-" + contextId;
-        String result = null;
-        boolean allNull = true;
-
-        for (var path : executionPathToStep.keySet()) {
-            var indexOf = path.indexOf(basePathEnding);
-            if (indexOf == -1) {
-                if (allNull) continue;
-                throw new KanalarzException.KanalarzIllegalUsageException(
-                    "Tried to resume-replay context [%s] but the list of steps had inconsistent root paths!"
-                        .formatted(contextId)
-                );
-            }
-            allNull = false;
-
-            var basePath = path.substring(0, indexOf + basePathEnding.length());
-
-            if (result != null && !result.equals(basePath)) {
-                throw new KanalarzException.KanalarzIllegalUsageException(
-                    "Tried to resume-replay context [%s] but the list of steps had inconsistent root paths!"
-                        .formatted(contextId)
-                );
-            }
-
-            result = basePath;
-        }
-
-        return result;
     }
 }

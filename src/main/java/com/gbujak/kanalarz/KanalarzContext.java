@@ -25,7 +25,8 @@ public class KanalarzContext {
     KanalarzContext(
         @Nullable UUID resumesId,
         EnumSet<Kanalarz.Option> options,
-        @Nullable StepReplayer stepReplayer
+        @Nullable StepReplayer stepReplayer,
+        @Nullable String restoredBasePath
     ) {
         this.id = resumesId != null
             ? resumesId
@@ -36,15 +37,12 @@ public class KanalarzContext {
         this.metadata = new ConcurrentHashMap<>();
         this.state = new AtomicReference<>(State.RUNNING);
 
-        var basePath =
-            resumesId != null && stepReplayer != null
-                ? stepReplayer.basePathForContextId(resumesId)
-                : null;
-
         this.executionContext =
-            Kanalarz.contextStack()
-                .map(contextStack -> contextStack.context().subContextExecution(resumesId))
-                .orElse(basePath != null ? new ExecutionContext(basePath) : new ExecutionContext());
+            restoredBasePath != null
+                ? new ExecutionContext(restoredBasePath)
+                : Kanalarz.contextStack()
+                    .map(contextStack -> contextStack.context().subContextExecution(resumesId))
+                    .orElse(new ExecutionContext());
     }
 
     private KanalarzContext(KanalarzContext other, ExecutionContext executionContext) {
@@ -194,8 +192,6 @@ public class KanalarzContext {
                 throw new KanalarzException.KanalarzContextCancelledException(false);
             case CANCELLED_FORCE_DEFER_ROLLBACK ->
                 throw new KanalarzException.KanalarzContextCancelledException(true);
-            case POISONED ->
-                throw new KanalarzException.KanalarzContextPoisonedException();
         }
     }
 
@@ -209,8 +205,6 @@ public class KanalarzContext {
         CANCELLED,
         /** Context has been cancelled and rollback is forcibly deferred. */
         CANCELLED_FORCE_DEFER_ROLLBACK,
-        /** Context cannot continue because replay encountered a fatal mismatch. */
-        POISONED,
     }
 
     /**
