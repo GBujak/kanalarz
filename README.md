@@ -282,6 +282,19 @@ Subcontexts maintain independent timelines and can be replayed independently
 
 [Examples here.](src/test/java/com/gbujak/kanalarz/NestedContextsTests.java)
 
+### Named vs unnamed subcontexts in fork-join
+
+Named subcontexts (`resumes(childId)`) replay by child context identity and keep an
+independent timeline.
+
+This makes child replay portable across parent reruns, but does not enforce parent
+fork-branch identity (`idx` affinity).
+
+If branch identity matters, prefer unnamed subcontexts, or include a branch key in
+step arguments/metadata and validate it.
+
+[Behavior examples here.](src/test/java/com/gbujak/kanalarz/NestedContextsTests.java)
+
 ### Fallible steps
 
 Use `@Step(fallible = true)` and return `StepOut<T>` to automatically catch exceptions from steps.
