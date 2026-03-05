@@ -389,6 +389,96 @@ public class NestedContextsTests {
             .containsExactlyInAnyOrder("parent-1-start", "child-1", "parent-2-start", "child-after-replay");
         assertThat(service.postsB.values()).containsExactlyInAnyOrder("child-2", "parent-1-end", "parent-2-end");
         assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(childId)).hasSize(3);
+        assertThat(
+            persistence.getExecutedStepsInContextInOrderOfExecutionStarted(childId).stream()
+                .map(KanalarzPersistence.StepExecutedInfo::executionPath)
+                .toList()
+        ).containsExactly(
+            "r.c-" + childId + ".s0",
+            "r.c-" + childId + ".s1",
+            "r.c-" + childId + ".s2"
+        );
+        assertThat(
+            persistence.getExecutedStepsInContextInOrderOfExecutionStarted(parentId).stream()
+                .map(KanalarzPersistence.StepExecutedInfo::executionPath)
+                .toList()
+        ).containsExactly(
+            "r.c-" + parentId + ".s0",
+            "r.c-" + childId + ".s0",
+            "r.c-" + childId + ".s1",
+            "r.c-" + parentId + ".s1",
+            "r.c-" + parentId + ".s0",
+            "r.c-" + childId + ".s2",
+            "r.c-" + parentId + ".s1"
+        );
+    }
+
+    @Test
+    void namedParentRerunShouldAllowResumingReplayOnlyFailedChildInsideParentForkJoin() {
+        UUID parentId = UUID.randomUUID();
+        UUID childId = UUID.randomUUID();
+        AtomicBoolean shouldFailChild = new AtomicBoolean(true);
+
+        Consumer<KanalarzContext> childJob = child -> {
+            steps.submitPostA("child-1");
+            steps.submitPostB("child-2");
+            if (shouldFailChild.getAndSet(false)) {
+                throw new RuntimeException("child-failure");
+            }
+            steps.submitPostA("child-after-replay");
+        };
+
+        kanalarz.newContext().resumes(parentId).consume(parent -> {
+            steps.submitPostA("parent-1-start");
+            assertThatThrownBy(() ->
+                Kanalarz.forkConsume(List.of(1), ignored ->
+                    kanalarz.newContext()
+                        .resumes(childId)
+                        .option(Kanalarz.Option.DEFER_ROLLBACK)
+                        .consume(childJob)
+                )
+            ).hasMessageContaining("child-failure");
+            steps.submitPostB("parent-1-end");
+        });
+
+        assertThat(service.postsA.values()).containsExactlyInAnyOrder("parent-1-start", "child-1");
+        assertThat(service.postsB.values()).containsExactlyInAnyOrder("child-2", "parent-1-end");
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(childId)).hasSize(2);
+
+        kanalarz.newContext().resumes(parentId).consume(parent -> {
+            steps.submitPostA("parent-2-start");
+            Kanalarz.forkConsume(List.of(1), ignored ->
+                kanalarz.newContext().resumes(childId).consumeResumeReplay(childJob)
+            );
+            steps.submitPostB("parent-2-end");
+        });
+
+        assertThat(service.postsA.values())
+            .containsExactlyInAnyOrder("parent-1-start", "child-1", "parent-2-start", "child-after-replay");
+        assertThat(service.postsB.values()).containsExactlyInAnyOrder("child-2", "parent-1-end", "parent-2-end");
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(childId)).hasSize(3);
+        assertThat(
+            persistence.getExecutedStepsInContextInOrderOfExecutionStarted(childId).stream()
+                .map(KanalarzPersistence.StepExecutedInfo::executionPath)
+                .toList()
+        ).containsExactly(
+            "r.c-" + childId + ".s0",
+            "r.c-" + childId + ".s1",
+            "r.c-" + childId + ".s2"
+        );
+        assertThat(
+            persistence.getExecutedStepsInContextInOrderOfExecutionStarted(parentId).stream()
+                .map(KanalarzPersistence.StepExecutedInfo::executionPath)
+                .toList()
+        ).containsExactly(
+            "r.c-" + parentId + ".s0",
+            "r.c-" + childId + ".s0",
+            "r.c-" + childId + ".s1",
+            "r.c-" + parentId + ".s2",
+            "r.c-" + parentId + ".s0",
+            "r.c-" + childId + ".s2",
+            "r.c-" + parentId + ".s2"
+        );
     }
 
     @Test
