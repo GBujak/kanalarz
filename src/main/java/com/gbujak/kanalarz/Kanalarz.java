@@ -340,9 +340,13 @@ public class Kanalarz {
             }
         }
 
+        Map<String, String> actualMetadata = new HashMap<>();
+        actualMetadata.putAll(contextStack().map(it -> it.context().fullMetadata()).orElse(Map.of()));
+        actualMetadata.putAll(metadata);
+
         try (
             var autoCloseableContext =
-                new AutoCloseableContext(metadata, resumesContext, options, replayer, restoredBasePath)
+                new AutoCloseableContext(actualMetadata, resumesContext, options, replayer, restoredBasePath)
         ) {
             try {
 

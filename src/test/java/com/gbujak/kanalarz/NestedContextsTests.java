@@ -588,4 +588,60 @@ public class NestedContextsTests {
         assertThat(service.postsA.values()).isEmpty();
         assertThat(service.postsB.values()).isEmpty();
     }
+
+    @Test
+    void childContextShouldInheritInitialContextCopyFromParent() {
+        kanalarz.newContext()
+            .metadata("test-1", "value-1")
+            .consume(ctx -> {
+                ctx.putMetadata("test-2", "value-2");
+                Kanalarz.contextStackOrThrow().context().putMetadata("test-3", "value-3");
+
+                assertThat(ctx.fullMetadata())
+                    .isEqualTo(Kanalarz.contextStackOrThrow().context().fullMetadata())
+                    .isEqualTo(Map.of(
+                        "test-1", "value-1",
+                        "test-2", "value-2",
+                        "test-3", "value-3"
+                    ));
+
+                kanalarz.newContext()
+                    .metadata("test-1", "override-1")
+                    .metadata("child-test-1", "value-1")
+                    .consume(ctx2 -> {
+
+                        assertThat(ctx2.fullMetadata())
+                            .isEqualTo(Kanalarz.contextStackOrThrow().context().fullMetadata())
+                            .isEqualTo(Map.of(
+                                "test-1", "override-1",
+                                "test-2", "value-2",
+                                "test-3", "value-3",
+                                "child-test-1", "value-1"
+                            ));
+
+                        ctx2.putMetadata("child-test-2", "value-2");
+                        ctx2.putMetadata("test-2", "override-2");
+
+                        assertThat(ctx2.fullMetadata())
+                            .isEqualTo(Kanalarz.contextStackOrThrow().context().fullMetadata())
+                            .isEqualTo(Map.of(
+                                "test-1", "override-1",
+                                "test-2", "override-2",
+                                "test-3", "value-3",
+                                "child-test-1", "value-1",
+                                "child-test-2", "value-2"
+                            ));
+
+                        Kanalarz.contextStackOrThrow().context().putMetadata("child-test-3", "value-3");
+                    });
+
+                assertThat(ctx.fullMetadata())
+                    .isEqualTo(Kanalarz.contextStackOrThrow().context().fullMetadata())
+                    .isEqualTo(Map.of(
+                        "test-1", "value-1",
+                        "test-2", "value-2",
+                        "test-3", "value-3"
+                    ));
+            });
+    }
 }
