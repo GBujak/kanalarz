@@ -350,6 +350,48 @@ public class NestedContextsTests {
     }
 
     @Test
+    void namedParentRerunShouldAllowResumingReplayOnlyFailedChildInsideParent() {
+        UUID parentId = UUID.randomUUID();
+        UUID childId = UUID.randomUUID();
+        AtomicBoolean shouldFailChild = new AtomicBoolean(true);
+
+        Consumer<KanalarzContext> childJob = child -> {
+            steps.submitPostA("child-1");
+            steps.submitPostB("child-2");
+            if (shouldFailChild.getAndSet(false)) {
+                throw new RuntimeException("child-failure");
+            }
+            steps.submitPostA("child-after-replay");
+        };
+
+        kanalarz.newContext().resumes(parentId).consume(parent -> {
+            steps.submitPostA("parent-1-start");
+            assertThatThrownBy(() ->
+                kanalarz.newContext()
+                    .resumes(childId)
+                    .option(Kanalarz.Option.DEFER_ROLLBACK)
+                    .consume(childJob)
+            ).hasMessageContaining("child-failure");
+            steps.submitPostB("parent-1-end");
+        });
+
+        assertThat(service.postsA.values()).containsExactlyInAnyOrder("parent-1-start", "child-1");
+        assertThat(service.postsB.values()).containsExactlyInAnyOrder("child-2", "parent-1-end");
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(childId)).hasSize(2);
+
+        kanalarz.newContext().resumes(parentId).consume(parent -> {
+            steps.submitPostA("parent-2-start");
+            kanalarz.newContext().resumes(childId).consumeResumeReplay(childJob);
+            steps.submitPostB("parent-2-end");
+        });
+
+        assertThat(service.postsA.values())
+            .containsExactlyInAnyOrder("parent-1-start", "child-1", "parent-2-start", "child-after-replay");
+        assertThat(service.postsB.values()).containsExactlyInAnyOrder("child-2", "parent-1-end", "parent-2-end");
+        assertThat(persistence.getExecutedStepsInContextInOrderOfExecutionStarted(childId)).hasSize(3);
+    }
+
+    @Test
     void childShouldBeAbleToBeReplayedOutsideOfTheParent() {
         UUID childId = UUID.randomUUID();
         List<UUID> posts = new ArrayList<>();
