@@ -8,7 +8,7 @@ Simple Spring library for persistent atomic jobs made of steps with rollbacks.
 <dependency>
     <groupId>com.gbujak</groupId>
     <artifactId>kanalarz</artifactId>
-    <version>4.0.3</version>
+    <version>4.0.4</version>
 </dependency>
 ```
 
@@ -164,6 +164,11 @@ side-effects outside of steps.**
 
 Nested steps are fully supported for resume replay, including nested contexts
 and fork-join tasks.
+
+In fork-join sections, if one branch finishes replaying before its siblings,
+it will wait for all sibling branches to complete replay before executing any
+new steps. This ensures no new steps run until the entire fork-join has been
+fully replayed.
 
 Resume replay is strict:
 
