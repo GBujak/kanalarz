@@ -1,7 +1,9 @@
 package com.gbujak.kanalarz;
 
 import com.gbujak.kanalarz.KanalarzPersistence.StepExecutedInfo;
-import com.gbujak.kanalarz.StepReplayer.SearchResult;
+import com.gbujak.kanalarz.StepReplayer.NotFound;
+import com.gbujak.kanalarz.StepReplayer.SearchResult.Found;
+import com.gbujak.kanalarz.StepReplayer.SearchResult.FoundShouldRerun;
 import com.gbujak.kanalarz.annotations.RollbackOnly;
 import com.gbujak.kanalarz.annotations.Step;
 import com.gbujak.kanalarz.annotations.StepsHolder;
@@ -188,13 +190,25 @@ public class Kanalarz {
             }
 
             switch (foundStep) {
-                case SearchResult.Found(var value) -> {
+                case Found(var value) -> {
                     return
                         StepOut.isTypeStepOut(stepInfo.returnType)
                             ? StepOut.ofNonNullOrThrow(value)
                             : value;
                 }
-                case SearchResult.FoundShouldRerun ignored -> {}
+                case FoundShouldRerun ignored -> {}
+
+                case NotFound notFound -> {
+                    if (context.getWaitForSiblings() != null) {
+                        context.getWaitForSiblings().waitForSiblingsDoneReplaying();
+                    }
+
+                    if (stepReplayer.isDone()) {
+                        context.clearStepReplayer();
+                    } else {
+                        notFound.throwNewStepReplayed();
+                    }
+                }
             }
         }
 
@@ -839,8 +853,10 @@ public class Kanalarz {
                 ? new Semaphore(maxParallelism)
                 : null;
 
+        var waitForSiblings = new WaitForSiblings(semaphore, elements.size());
+
         for (int i = 0; i < elements.size(); i++) {
-            var contextCopy = context.copy(forkJoinExecutionContext.forTask(i));
+            var contextCopy = context.copy(forkJoinExecutionContext.forTask(i), waitForSiblings);
             var element = elements.get(i);
             futures.add(CompletableFuture.supplyAsync(() -> {
                 if (semaphore != null) semaphore.acquireUninterruptibly();
@@ -848,6 +864,7 @@ public class Kanalarz {
                     kanalarzContextThreadLocal.set(new ContextStack(contextCopy, contextStack.parents));
                     return function.apply(element);
                 } finally {
+                    waitForSiblings.yieldFork();
                     kanalarzContextThreadLocal.remove();
                     if (semaphore != null) semaphore.release();
                 }

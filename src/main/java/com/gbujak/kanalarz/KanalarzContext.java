@@ -21,6 +21,7 @@ public class KanalarzContext {
     @Nullable private StepStack stepStack = null;
     private final AtomicReference<State> state;
     private final ExecutionContext executionContext;
+    @Nullable private WaitForSiblings waitForSiblings;
 
     KanalarzContext(
         @Nullable UUID resumesId,
@@ -45,7 +46,11 @@ public class KanalarzContext {
                     .orElse(new ExecutionContext());
     }
 
-    private KanalarzContext(KanalarzContext other, ExecutionContext executionContext) {
+    private KanalarzContext(
+        KanalarzContext other,
+        ExecutionContext executionContext,
+        WaitForSiblings waitForSiblings
+    ) {
         this.id = other.id;
         this.options = other.options;
         this.stepReplayer = other.stepReplayer;
@@ -53,10 +58,11 @@ public class KanalarzContext {
         this.metadata = other.metadata;
         this.state = other.state;
         this.executionContext = executionContext;
+        this.waitForSiblings = waitForSiblings;
     }
 
-    KanalarzContext copy(ExecutionContext executionContext) {
-        return new KanalarzContext(this, executionContext);
+    KanalarzContext copy(ExecutionContext executionContext, WaitForSiblings waitForSiblings) {
+        return new KanalarzContext(this, executionContext, waitForSiblings);
     }
 
     @Override
@@ -153,6 +159,11 @@ public class KanalarzContext {
     @Nullable
     StepReplayer stepReplayer() {
         return stepReplayer;
+    }
+
+    @Nullable
+    WaitForSiblings getWaitForSiblings() {
+        return waitForSiblings;
     }
 
     void clearStepReplayer() {

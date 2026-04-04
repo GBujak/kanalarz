@@ -36,20 +36,21 @@ class StepReplayer {
         }
     }
 
-    public SearchResult findNextStep(String executionPath, String stepIdentifier, String serializedParametersInfo) {
+    public SearchResult findNextStep(
+        String executionPath,
+        String stepIdentifier,
+        String serializedParametersInfo
+    ) {
+
         if (poisoned) {
             throw new KanalarzException.KanalarzContextPoisonedException();
         }
 
         lock.lock();
         try {
-
             var step = executionPathToStep.get(executionPath);
             if (step == null) {
-                throw new KanalarzException.KanalarzNewStepBeforeReplayEndedException(
-                    "[%s] with execution path [%s] was called but following steps weren't yet replayed:\n%s"
-                        .formatted(stepIdentifier, executionPath, unreplayedStepsInfo())
-                );
+                return new NotFound(stepIdentifier, executionPath, unreplayedStepsInfo());
             }
             if (!step.stepIdentifier().equals(stepIdentifier)) {
                 throw new KanalarzException.KanalarzNewStepBeforeReplayEndedException(
@@ -122,8 +123,30 @@ class StepReplayer {
 
     sealed interface SearchResult {
         record Found(@Nullable Object value) implements SearchResult {}
+
         record FoundShouldRerun() implements SearchResult {}
         SearchResult FoundShouldRerun = new FoundShouldRerun();
+    }
+
+    final class NotFound implements SearchResult {
+
+        private final String stepIdentifier;
+        private final String executionPath;
+        private final String unreplayedStepsInfo;
+
+        public NotFound(String stepIdentifier, String executionPath, String unreplayedStepsInfo) {
+            this.stepIdentifier = stepIdentifier;
+            this.executionPath = executionPath;
+            this.unreplayedStepsInfo = unreplayedStepsInfo;
+        }
+
+        void throwNewStepReplayed() {
+            poisoned = true;
+            throw new KanalarzException.KanalarzNewStepBeforeReplayEndedException(
+                "[%s] with execution path [%s] was called but following steps weren't yet replayed:\n%s"
+                    .formatted(stepIdentifier, executionPath, unreplayedStepsInfo)
+            );
+        }
     }
 
     public String unreplayedStepsInfo() {
